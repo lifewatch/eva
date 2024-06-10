@@ -2,17 +2,23 @@
   "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
   "@type": "SoftwareSourceCode",
   "identifier": "{id of the GitHub repo (can be DOI)}",
-  "description": "{short description of the GitHub repository}",
-  "name": "{name of the GitHub repository}",
-  "codeRepository": "{url of the GitHub repository}",
+  "description": "Ecological value assessment (EVA)",
+  "name": "eva",
+  "codeRepository": "https://github.com/lifewatch/eva",
   "issueTracker": "{url of issuetracker of the GitHub repository}",
   "license": "{license of the GitHub repository}",
   "version": "{version of the GitHub repository}",
-  "programmingLanguage": {
+  "programmingLanguage": [
+    {
     "@type": "ComputerLanguage",
-    "name": "{name (e.g. R, python, ...}",
-    "url": "{general info site of the programming language}"
-  },
+    "name": "Python",
+    "url": "https://www.python.org/",
+    },
+    {"@type": "ComputerLanguage",
+    "name": "R",
+    "url": "https://www.r-project.org/
+    }
+   ],
   "runtimePlatform": "{name of the runtimePlatform on which the code runs}",
   "provider": {
     "@id": "https://ror.org/{ROR-ID}",
@@ -23,10 +29,24 @@
   "contributor": [
     {
       "@type": "Person",
-      "givenName": "{first name}",
-      "familyName": "{last name}",
-      "email": "{(work) email}",
-      "@id": "https://orcid.org/{OrcID}"
+      "givenName": "Marie Catherine",
+      "familyName": "Bouquieaux",
+      "email": "(work) marie.catherine.bouquieaux@vliz.be",
+      "@id": "https://orcid.org/0009-0007-1907-1713"
+    },
+    {
+      "@type": "Person",
+      "givenName": "Hanneloor",
+      "familyName": "Heynderickx",
+      "email": "(work) hanneloor.heynderickx@vliz.be",
+      "@id": "https://orcid.org/0000-0002-5611-837X"
+    },
+    {
+      "@type": "Person",
+      "givenName": "Willem",
+      "familyName": "Boone",
+      "email": "(work) willem.boone@vliz.be",
+      "@id": "https://orcid.org/0009-0008-0916-6847"
     }
   ],
   "copyrightHolder": [
@@ -41,8 +61,8 @@
   "funder": [
     {
       "@type": "Organization",
-      "@id": "https://ror.org/{ROR-ID}",
-      "name": "{name}"
+      "@id": "https://ror.org/019w4f821",
+      "name": "{European Union Horizon Europe research and innovation programme under Grant Agreement no 101060937 }"
     }
   ],
   "maintainer": [
@@ -58,11 +78,17 @@
     "1": {
       "@type": "SoftwareApplication",
       "identifier": "{id}",
-      "name": "{name}",
+      "name": "{R}",
       "version": "{version}"
+    },
+    "2": {
+      "@type": "SoftwareApplication",
+      "identifier": "{id}",
+      "name": "{Python}",
+      "version": "{3.12}"
     }
   },
   "isPartOf": "{link of other things this repository is part of (e.g. GitHub repo, workflows, datasets, ...}",
-  "keywords": ["{keyword}", "{keyword}", "..."],
+  "keywords": ["{Marbefes", "EVA", "Ecological value assessment", "biodiversity"],
   "readme": "{link to the README file in the GitHub repository}"
 }
