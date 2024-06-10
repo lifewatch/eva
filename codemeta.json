@@ -16,7 +16,7 @@
     },
     {"@type": "ComputerLanguage",
     "name": "R",
-    "url": "https://www.r-project.org/
+    "url": "https://www.r-project.org/"
     }
    ],
   "runtimePlatform": "{name of the runtimePlatform on which the code runs}",
