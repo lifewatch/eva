@@ -5,9 +5,9 @@
   "description": "Ecological value assessment (EVA)",
   "name": "eva",
   "codeRepository": "https://github.com/lifewatch/eva",
-  "issueTracker": "{url of issuetracker of the GitHub repository}",
+  "issueTracker": "https://github.com/lifewatch/eva/issues",
   "license": "{license of the GitHub repository}",
-  "version": "{version of the GitHub repository}",
+  "version": "0.0.1",
   "programmingLanguage": [
     {
     "@type": "ComputerLanguage",
@@ -21,10 +21,10 @@
    ],
   "runtimePlatform": "{name of the runtimePlatform on which the code runs}",
   "provider": {
-    "@id": "https://ror.org/{ROR-ID}",
+    "@id": "https://ror.org/0496vr396",
     "@type": "Organization",
-    "name": "{name}",
-    "url": "{website of organization}"
+    "name": "Flanders Marine Institute",
+    "url": "https://vliz.be/en"
   },
   "contributor": [
     {
@@ -62,7 +62,7 @@
     {
       "@type": "Organization",
       "@id": "https://ror.org/019w4f821",
-      "name": "{European Union Horizon Europe research and innovation programme under Grant Agreement no 101060937 }"
+      "name": "European Union Horizon Europe research and innovation programme under Grant Agreement no 101060937"
     }
   ],
   "maintainer": [
@@ -78,17 +78,17 @@
     "1": {
       "@type": "SoftwareApplication",
       "identifier": "{id}",
-      "name": "{R}",
+      "name": "R",
       "version": "{version}"
     },
     "2": {
       "@type": "SoftwareApplication",
       "identifier": "{id}",
-      "name": "{Python}",
-      "version": "{3.12}"
+      "name": "Python",
+      "version": "3.12"
     }
   },
   "isPartOf": "{link of other things this repository is part of (e.g. GitHub repo, workflows, datasets, ...}",
   "keywords": ["{Marbefes", "EVA", "Ecological value assessment", "biodiversity"],
-  "readme": "{link to the README file in the GitHub repository}"
+  "readme": "https://github.com/lifewatch/eva/blob/main/Readme.md"
 }
