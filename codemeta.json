@@ -20,7 +20,7 @@
     }
    ],
   "operatingSystem": "Windows 11",
-  "runtimePlatform": "[Python 3.12.1", "R"],
+  "runtimePlatform": ["Python 3.12.1", "R"],
   "provider": {
     "@id": "https://ror.org/0496vr396",
     "@type": "Organization",
