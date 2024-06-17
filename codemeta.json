@@ -20,7 +20,7 @@
     }
    ],
   "operatingSystem": "Windows 11",
-  "runtimePlatform": "[Python 3.12.1", "R"]
+  "runtimePlatform": "[Python 3.12.1", "R"],
   "provider": {
     "@id": "https://ror.org/0496vr396",
     "@type": "Organization",
@@ -84,7 +84,7 @@
     },
     "2": {
       "@type": "SoftwareApplication",
-      "identifier": https://github.com/numpy/numpy"",
+      "identifier": "https://github.com/numpy/numpy",
       "name": "numpy",
       "version": "1.26.4"
     },
@@ -108,6 +108,6 @@
     },
   },
   "isPartOf": "{link of other things this repository is part of (e.g. GitHub repo, workflows, datasets, ...}",
-  "keywords": ["{Marbefes", "EVA", "Ecological value assessment", "biodiversity"],
+  "keywords": ["Marbefes", "EVA", "Ecological value assessment", "biodiversity"],
   "readme": "https://github.com/lifewatch/eva/blob/main/Readme.md"
 }
