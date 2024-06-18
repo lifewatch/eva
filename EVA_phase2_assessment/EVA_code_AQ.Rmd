@@ -44,7 +44,7 @@ Rmarkdown was created and ran using the following version:
 
 *List of packages used*
 ```{r list_package, message=FALSE, warning=FALSE}
-my_packages <- c( "data.table","sf", "raster", "raster",   
+my_packages <- c( "data.table","sf", "raster",   
                  "tidyr","dplyr", "rnaturalearth","rnaturalearthdata", "devtools", "knitr","kableExtra") 
 ```
 
