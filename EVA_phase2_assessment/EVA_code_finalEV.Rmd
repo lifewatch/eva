@@ -39,19 +39,17 @@ If you like to knit the Rmarkdown script into a PDF an additional installation o
 *List of packages used*
 ```{r list_package, message=FALSE, warning=FALSE}
 my_packages <- c( "data.table","sf", "raster",   
-                 "tidyr","dplyr", "rnaturalearth","rnaturalearthdata", "devtools", "knitr","kableExtra") 
+                 "tidyr","dplyr", "rnaturalearth","rnaturalearthdata", "devtools", "knitr","kableExtra", "ggplot2") 
 ```
 
 *To run only if some packages mentioned above are not already installed*
 ```{r install_package}
 install.packages(my_packages)
-# Latest update of ggplot2 is not working properly
-devtools::install_version("ggplot2", version = "3.4.4")
 ```
 
 *Load packages*
 ```{r load_package, message=FALSE, warning=FALSE}
-lapply(c(my_packages, "ggplot2"), require, character.only = TRUE)
+lapply(c(my_packages), require, character.only = TRUE)
 ```
 
 ## 2. Input parameters (Settings)
@@ -88,12 +86,13 @@ ymax <- 55.5
 
 ## Path settings for the coordinates of the BBT
 # Complete path and file name containing the BBT information
-BBT_coordinates <- "~/Documents/EVA_process/BBT_coordinates/centerlinev2.gpkg"
+BBT_coordinates <- "~/Documents/EVA_process/BBT_coordinates/centerlinev2_20kmbuffer.gpkg"
 # If a specific layers need to be used, enter name here:
-BBT_layer <- "buffer20km"
+BBT_layer <- ""
 
-# Which classification methods should be used:
-quantile_classification <- TRUE
+#Show result with continous scale or with discrete variables
+continous <- TRUE
+
 ```
 
 ### 2.2 Get surrounding country map information
@@ -106,36 +105,6 @@ world_data <- ne_countries(scale = "medium", returnclass = "sf") |>
   sf::st_crop(c(xmin= xmin, xmax = xmax, ymin = ymin, ymax = ymax))
 ```
 
-```{r qlassification}
-# Classification the results into five categories
-# x is the datafrale and y is the column; z is the name you want the added column to have.
-# You can modify the categories based on the range of variability of your data. 
-if (quantile_classification == TRUE){
-  QClassify <- function(x, y, z) { 
-  q<-quantile(y,  probs = c(20, 40, 60, 80, 100)/100,na.rm= TRUE)
-  x <- x %>%
-    mutate(class_1_5 = ifelse(y >= 0 & y <= q[1], 1,
-                        ifelse(y > q[1] & y <= q[2], 2,
-                               ifelse(y > q[2] & y <= q[3], 3,
-                                      ifelse(y > q[3] & y <= q[4], 4,
-                                             ifelse(y > q[4] & y <= q[5], 5, NA))))))
-  names(x)[names(x) == "class_1_5"] <- z
-  return(x)
-  }
-} else{
-  QClassify <- function(x, y, z) { 
-    x <- x %>% 
-    mutate(class_1_5 = case_when((y >=0 & y <= 1.5) ~ 1,
-                               (y >1.5 & y <= 2.5) ~ 2,
-                               (y >2.5 & y <= 3.5) ~ 3,
-                               (y >3.5 & y <= 4.5) ~ 4,
-                               (y >4.5 & y <= 5) ~ 5,))
-  names(x)[names(x) == "class_1_5"] <- z
-  return(x)
-  }
-}
-
-```
 
 ## 3. Rescaling of the 250m grid
 
@@ -222,12 +191,9 @@ if(exists('data_EC_rescaled') && is.data.frame(get('data_EC_rescaled'))){
 data_EC_total_valuation <- data_EC %>%
   st_drop_geometry() %>%
   group_by(grid_id) %>% 
-  dplyr::summarise_at(vars(Total), list(total_Valuation = mean), .groups="drop", na.rm=TRUE)
+  dplyr::summarise_at(vars(Total), list(Total_EV = mean), .groups="drop", na.rm=TRUE)
 
 grid_polygons_sf <- data_EC[unique(data_EC$grid_id),c( "grid_id", "geometry")]
-
-
-BBT_EC_EVa<-QClassify(data_EC_total_valuation, data_EC_total_valuation$total_Valuation, "Total_EV")
 
 BBT_EC_EV <- BBT_EC_EVa %>%
   mutate_all(~ifelse(is.nan(.), NA, .)) %>%
@@ -244,23 +210,49 @@ st_write(BBT_EC_EV, file.path(Output,"BBT_final_EV_layers.shp"), append = FALSE)
 **Plot EV score**
 
 ```{r plot_final+score, message=FALSE, warning=FALSE, results='hide'}
-ggplot()+
-  geom_sf(data = BBT_EC_EV$geometry, aes(fill = factor(BBT_EC_EV$Total_EV)), lwd = 0, colour = "grey90") +
-  scale_fill_manual(values = viridisLite::viridis(5), name = "Ecological Valuation score", limits = c(1,2,3,4,5), na.value = "grey94", labels = c(
-    "1" = "Very Low",
-    "2" = "Low",
-    "3" = "Medium",
-    "4" = "High",
-    "5" = "Very High"
-  ), drop = FALSE) +
-  geom_sf(data = world_data$geometry) +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
-        axis.text.x=element_text(angle=300,hjust=0))
-
-ggsave(filename=file.path(Output,"Total_Valutation_Score.png"),
-      width = NA,
-      height = NA,
-      units = "cm",
-      dpi=1600)
+if (continous == TRUE){
+  print(ggplot()+
+   geom_sf(data = BBT_EC_EV$geometry,lwd = 0) +
+   geom_sf(data = BBT_EC_EV, aes(fill=BBT_EC_EV$Total_EV), colour = "grey90", lwd = 0) + 
+   scale_fill_viridis_c(name = "Ecological Valuation score", na.value = "grey94", limits = c(0,5)) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0)))
+ggsave(filename=file.path(Output, "Total_Valutation_Score.png"),
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+} else{
+  # Define the categories and colors
+  categories <- c("0 - 1", "1 - 2", "2 - 3", "3 - 4", "4 - 5")
+  mycolors <- viridisLite::viridis(5) 
+  # Create categories with explicit levels
+  BBT_EC_EV$category_graph <- cut(
+      BBT_EC_EV$Total_EV,
+      breaks = c(0, 1, 2, 3, 4, 5),
+      include.lowest = TRUE,
+      labels = categories,
+      # Force creation of all levels
+      right = FALSE,
+      # Ensure that all levels are present
+      levels = categories
+  )
+  print(ggplot()+
+   geom_sf(data = BBT_EC_EV$geometry,lwd = 0) +
+   geom_blank() +
+   geom_sf(data = BBT_EC_EV, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + # show.legend allow to have colors in legend even for categories without data points
+   scale_fill_manual(values = mycolors, name = "Ecological Valuation score", limits = categories, na.value = "grey94", 
+                     labels = categories, drop = FALSE) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0))
+   )
+ggsave(filename=file.path(Output, "Total_Valutation_Score.png"),
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+}
 
 ```
