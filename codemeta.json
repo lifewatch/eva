@@ -55,10 +55,10 @@
   "copyrightHolder": [
     {
       "@type": "Person",
-      "givenName": "{first name}",
-      "familyName": "{last name}",
-      "email": "{(work) email}",
-      "@id": "https://orcid.org/{OrcID}"
+      "givenName": "Klaas",
+      "familyName": "Deneudt",
+      "email": "klaas.deneudt@vliz.be",
+      "@id": "https://orcid.org/0000-0002-8559-3508"
     }
   ],
   "funder": [
@@ -71,10 +71,10 @@
   "maintainer": [
     {
       "@type": "Person",
-      "givenName": "{first name}",
-      "familyName": "{last name}",
-      "email": "{email}",
-      "@id": "https://orcid.org/{OrcID}"
+      "givenName": "Marie Catherine",
+      "familyName": "Bouquieaux",
+      "email": "marie.catherine.bouquieaux@vliz.be",
+      "@id": "https://orcid.org/0009-0007-1907-1713"
     }
   ],
   "softwareRequirements": {
@@ -163,7 +163,6 @@
       "version": "3.5.1"
     }
   },
-  "isPartOf": "{link of other things this repository is part of (e.g. GitHub repo, workflows, datasets, ...}",
   "keywords": ["Ecological value assessment", "biodiversity or https://aims.fao.org/aos/agrovoc/c_33949.html"],
   "readme": "https://github.com/lifewatch/eva/blob/main/Readme.md"
 }
