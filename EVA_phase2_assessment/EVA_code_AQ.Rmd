@@ -45,19 +45,17 @@ Rmarkdown was created and ran using the following version:
 *List of packages used*
 ```{r list_package, message=FALSE, warning=FALSE}
 my_packages <- c( "data.table","sf", "raster",   
-                 "tidyr","dplyr", "rnaturalearth","rnaturalearthdata", "devtools", "knitr","kableExtra") 
+                 "tidyr","dplyr", "rnaturalearth","rnaturalearthdata", "devtools", "knitr","kableExtra", "ggplot2") 
 ```
 
 *To run only if some packages mentioned above are not already installed*
 ```{r install_package}
 install.packages(my_packages)
-# Latest update of ggplot2 is not working properly
-devtools::install_version("ggplot2", version = "3.4.4")
 ```
 
 *Load packages*
 ```{r load_package, message=FALSE, warning=FALSE}
-lapply(c(my_packages, "ggplot2"), require, character.only = TRUE)
+lapply(c(my_packages), require, character.only = TRUE)
 ```
 
 ## 2. Input parameters (Settings)
@@ -115,8 +113,9 @@ xmax <- 3.5
 ymin <- 51
 ymax <- 55.5 
 
-# Which classification methods should be used:
-quantile_classification <- TRUE
+#Show result with continous scale or with discrete variables
+continous <- TRUE
+
 ```
 
 -   **CreateGrid:** create a grid for subzones. TRUE or
@@ -128,7 +127,7 @@ quantile_classification <- TRUE
 
 ```{r setting2}
 CreateGrid<-TRUE
-GridSize<-250 #3km=3000 or 250m=250
+GridSize<-3000 #3km=3000 or 250m=250
 ```
 
 ### 2.2 Define the ecological significant species to be used. Put the first letter of each 'genus' in capitals.
@@ -142,7 +141,9 @@ the vector empty.
 # Bird ESS
 #ESS <- c("Arenaria interpres", "Larus argentatus", "Larus fuscus", "Sternula albifrons", "Sterna hirundo", "Sterna sandvicensis")
 # Benthos ESS
-#ESS <- c("Abra alba", "Asterias rubens", "Bathyporeia pilosa", "Bathyporeia sarsi", "Eumida sanguinea", "Eurydice affinis", "Eurydice pulchra", "Kurtiella bidentata", "Nephtys hombergii", "Pariambus typicus", "Pygospio elegans", "Scolelepis squamata", "Fabulina fabula", "Pomatoschistus lozanoi", "Pomatoschistus microps", "Pomatoschistus minutus")
+#ESS <- c("Abra alba", "Asterias rubens", "Bathyporeia pilosa", "Bathyporeia sarsi", "Eumida sanguinea", "Eurydice affinis", "Eurydice pulchra", "Kurtiella bidentata", "Nephtys hombergii", "Pariambus typicus", "Pygospio elegans", "Scolelepis squamata", "Fabulina fabula")
+#Fish ESS
+#ESS <- c("Pomatoschistus lozanoi", "Pomatoschistus microps", "Pomatoschistus minutus")
 
 ### Enter your own list here:
 ESS <- c()
@@ -289,6 +290,7 @@ filter((Longitude>=-90 & Longitude<=90) |
 
 ```
 
+
 ## 5. Prepare map and create spatial grid
 
 ### 5.1. Get BBT coordinates
@@ -391,23 +393,18 @@ produce_map <- function(dataset,data_used, title){
 }
 
 ## Map for AQ and total score
-produce_map_sf <- function(dataset,class_column,name_AQ){
+produce_map_sf <- function(dataset,class_column,name_AQ, continous){
   names(dataset)[names(dataset) %in% class_column] <- name_AQ
   # Combine the final score with the grid geometry.
-  #browser()
   add_grid_geometry <- GRID_degree_4326 %>% 
     left_join(dataset)
+  add_grid_geometry[[name_AQ]] <- as.numeric(add_grid_geometry[[name_AQ]])
   
-  # browser()
-  print(ggplot()+
+  if (continous == TRUE){
+    print(ggplot()+
      geom_sf(data = add_grid_geometry$geometry,lwd = 0) +
-     geom_sf(data = add_grid_geometry, aes(fill=as.factor(.data[[name_AQ]])), colour = "grey90", lwd = 0) + 
-     scale_fill_manual(values = viridisLite::viridis(5), name = name_AQ, limits = factor(c(1,2,3,4,5)), na.value = "grey94", labels = c("1" = "Very Low",
-     "2" = "Low",
-     "3" = "Medium",
-     "4" = "High",
-     "5" = "Very High"
-     ), drop = FALSE)+
+     geom_sf(data = add_grid_geometry, aes(fill=.data[[name_AQ]]), colour = "grey90", lwd = 0) + 
+     scale_fill_viridis_c(name = name_AQ, na.value = "grey94", limits = c(0,5)) +
      geom_sf(data = world_data$geometry) +
      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
            axis.text.x=element_text(angle=300,hjust=0)))
@@ -416,6 +413,38 @@ produce_map_sf <- function(dataset,class_column,name_AQ){
       height = NA,
       units = "cm",
       dpi=1600)
+  } else{
+    # Define the categories and colors
+    categories <- c("0 - 1", "1 - 2", "2 - 3", "3 - 4", "4 - 5")
+    mycolors <- viridisLite::viridis(5) 
+    # Create categories with explicit levels
+    add_grid_geometry$category_graph <- cut(
+        add_grid_geometry[[name_AQ]],
+        breaks = c(0, 1, 2, 3, 4, 5),
+        include.lowest = TRUE,
+        labels = categories,
+        # Force creation of all levels
+        right = FALSE,
+        # Ensure that all levels are present
+        levels = categories
+    )
+    print(ggplot()+
+     geom_sf(data = add_grid_geometry$geometry,lwd = 0) +
+     geom_blank() +
+     geom_sf(data = add_grid_geometry, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + # show.legend allow to have colors in legend even for categories without data points
+     scale_fill_manual(values = mycolors, name = name_AQ, limits = categories, na.value = "grey94", 
+                       labels = categories, drop = FALSE) +
+     geom_sf(data = world_data$geometry) +
+     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+           axis.text.x=element_text(angle=300,hjust=0))
+     )
+  ggsave(filename=file.path(Output, paste0(OutputFileName,"_",name_AQ,".png")),
+      width = NA,
+      height = NA,
+      units = "cm",
+      dpi=1600)
+  }
+  
 }
 
 ```
@@ -453,20 +482,43 @@ EcoComp1.3 <- EcoComp1.3a[!is.na(EcoComp1.3a$grid_id),]
 # Create unique location numbers
 EcoComp1.3$LocationNumber<-(round(EcoComp1.3$Latitude, digits=4))/100+10000*
   (round(EcoComp1.3$Longitude, digits=4))
+assessment_data <- EcoComp1.3
 ```
 
 ### 6.2 Distribution map of your data 
 
 ```{r mapid_distribution}
 
-produce_map(EcoComp1.3,"all_dataset", "Point of all the data available")
+produce_map(assessment_data,"all_dataset", "Point of all the data available")
 
 ```
+
+### 6.3 Dataset qualitative AQs/quantitative AQs
+
+```{r dfqual_quant}
+
+# Qualitative AQs can be answered using all available data
+# THis dataset is the assessment_data created above
+
+# Quantitative AQs can only be answered using abundance data 
+Quantitative_data <- EcoComp1.3[ which(EcoComp1.3$Density > 0), ]
+
+```
+
+**Distribution map of your quantitative data**
+
+
+```{r dfqual_quant_distribution}
+
+produce_map(Quantitative_data,"quantitative_dataset","Abundance data available")
+
+```
+
 
 ## 7. Calculating assessment questions (AQs)
 
 It is **mandatory** to run all chunk of codes of this
-section (7.1 to 7.17), even if no ecologically significant
+section (7.1 to 7.16), even if no ecologically significant
 species are present for example (AQ 10-11).
 
 ```{r divaq}
@@ -476,62 +528,27 @@ PolIDs<-data.frame(grid_id=sort(unique(EcoComp1.3$grid_id),decreasing=FALSE))
 # Number of GridPolygons (PolIDs) with data
 NpolID<-dim(PolIDs)[1] 
 
-# Classification of the results into five categories
+# Rescaling of the results
 # x is the dataframe and y is the column; z is the name you want the added column to have
-if (quantile_classification == TRUE){
-  QClassify <- function(x, y, z) { 
-  q<-quantile(y,  probs = c(20, 40, 60, 80, 100)/100,na.rm= TRUE)
+QClassify <- function(x, y, z) { 
+  max_value <- max(y, na.rm = TRUE)
   x <- x %>%
-    mutate(class_1_5 = ifelse(y >= 0 & y <= q[1], 1,
-                        ifelse(y > q[1] & y <= q[2], 2,
-                               ifelse(y > q[2] & y <= q[3], 3,
-                                      ifelse(y > q[3] & y <= q[4], 4,
-                                             ifelse(y > q[4] & y <= q[5], 5, NA))))))
+    mutate(class_1_5 = (5*y)/max_value)
   names(x)[names(x) == "class_1_5"] <- z
   return(x)
-  }
-} else{
-  QClassify <- function(x, y, z) { 
-    x <- x %>% 
-    mutate(class_1_5 = case_when((y >=0 & y <= 1.5) ~ 1,
-                               (y >1.5 & y <= 2.5) ~ 2,
-                               (y >2.5 & y <= 3.5) ~ 3,
-                               (y >3.5 & y <= 4.5) ~ 4,
-                               (y >4.5 & y <= 5) ~ 5,))
-  names(x)[names(x) == "class_1_5"] <- z
-  return(x)
-  }
 }
 
-```
-
-### 7.1 Create a dataset for qualitative and quantitative data
-
-```{r dfqual_quant}
-
-# Qualitative AQs can be answered using all available data
-Qualitative_data <- EcoComp1.3
-
-# Quantitative AQs can only be answered using abundance data 
-Quantitative_data <- EcoComp1.3[ which(EcoComp1.3$Density > 0), ]
 
 ```
 
-**Distribution map of your quantitative data**
 
-```{r dfqual_quant_distribution}
+### 7.1 Get a list of rare and common species
 
-produce_map(Quantitative_data,"quantitative_dataset","Abundance data available")
-
-```
-
-### 7.2 Get a list of rare and common species
-
-#### 7.2.1 Rare and common species list per subzone.
+#### 7.1.1 Rare and common species list per subzone.
 
 ```{r raresp}
 # Creating a list of unique grid_id -  combinations
-RareSpecList1<-aggregate(ID~ grid_id+ScientificName, data = Qualitative_data, length) 
+RareSpecList1<-aggregate(ID~ grid_id+ScientificName, data = assessment_data, length) 
 
 # Counting the number of grid_ids where each species occurs
 RareSpecList2<-aggregate(grid_id~ScientificName,data=RareSpecList1, length) 
@@ -551,13 +568,14 @@ EcoCompCommon_quant <- Quantitative_data[Quantitative_data$ScientificName %in% C
 
 ```{r locally_raresp_distribution}
 
-Rarespec_loc_qualitative <- Qualitative_data[Qualitative_data$ScientificName %in% RareSpecList$ScientificName,]
-st_write(Rarespec_loc_qualitative, file.path(Output,"locally_rare_species_occurence_distribution.shp"), append = FALSE)
-produce_map(Rarespec_loc_qualitative,"locally_rare_sp_occurence", "Locally rare species occurence data available")
+Rarespec_loc <- assessment_data[assessment_data$ScientificName %in% RareSpecList$ScientificName,]
+st_write(Rarespec_loc, file.path(Output,"locally_rare_species_distribution.shp"), append = FALSE)
+produce_map(Rarespec_loc,"locally_rare_sp", "Locally rare species data available")
 
 Rarespec_loc_quantitative <- Quantitative_data[Quantitative_data$ScientificName %in% RareSpecList$ScientificName,]
-st_write(Rarespec_loc_qualitative, file.path(Output,"locally_rare_species_abundance_distribution.shp"), append = FALSE)
+st_write(Rarespec_loc_quantitative, file.path(Output,"locally_rare_species_abundance_distribution.shp"), append = FALSE)
 produce_map(Rarespec_loc_quantitative,"locally_rare_sp_abundance", "Locally rare species abundance data available")
+
 
 ```
 
@@ -565,7 +583,7 @@ produce_map(Rarespec_loc_quantitative,"locally_rare_sp_abundance", "Locally rare
 
 ```{r locally_raresp_occurences}
 
-Rarespec_loc_qualitative_count <- Rarespec_loc_qualitative %>%
+Rarespec_loc_count <- Rarespec_loc %>%
   group_by(ScientificName) %>% 
   summarise(occurence_data_present = n(), .groups="drop") %>%
   st_drop_geometry()
@@ -575,15 +593,16 @@ Rarespec_loc_quantitative_count <- Rarespec_loc_quantitative %>%
   summarise(abundance_data_present = n(), .groups="drop") %>%
   st_drop_geometry()
 
-print(kbl(list(Rarespec_loc_qualitative_count,Rarespec_loc_quantitative_count))%>%
+print(kbl(list(Rarespec_loc_count,Rarespec_loc_quantitative_count))%>%
   kable_classic(full_width = F, html_font = "Cambria"))
 
-write.csv(Rarespec_loc_qualitative_count, file = file.path(Output, paste0(OutputFileName,"_local_rare_sp_occurence_count.csv")), row.names = FALSE)
+write.csv(Rarespec_loc_count, file = file.path(Output, paste0(OutputFileName,"_local_rare_sp_count.csv")), row.names = FALSE)
 write.csv(Rarespec_loc_quantitative_count, file = file.path(Output, paste0(OutputFileName,"_local_rare_sp_abundance_count.csv")), row.names = FALSE)
+
 
 ```
 
-#### 7.2.2 Rare species list on Regional Scale
+#### 7.1.2 Rare species list on Regional Scale
 
 This part needs extra steps:
 
@@ -632,9 +651,9 @@ RareSpecList_region<-RareSpecList2_region[which(RareSpecList2_region$grid_id<=(N
 
 ```{r regsp_distribution}
 
-Rarespec_reg_qualitative <- Qualitative_data[Qualitative_data$ScientificName %in% RareSpecList_region$ScientificName,]
-st_write(Rarespec_reg_qualitative, file.path(Output,"regionally_rare_species_occurence_distribution.shp"), append = FALSE)
-produce_map(Rarespec_reg_qualitative,"regionally_rare_sp_occurence", "Regionally rare species occurence data available")
+Rarespec_reg <- assessment_data[assessment_data$ScientificName %in% RareSpecList_region$ScientificName,]
+st_write(Rarespec_reg, file.path(Output,"regionally_rare_species_distribution.shp"), append = FALSE)
+produce_map(Rarespec_reg,"regionally_rare_sp", "Regionally rare species data available")
 
 Rarespec_reg_quantitative <- Quantitative_data[Quantitative_data$ScientificName %in% RareSpecList_region$ScientificName,]
 st_write(Rarespec_reg_quantitative, file.path(Output,"regionally_rare_species_abundance_distribution.shp"), append = FALSE)
@@ -646,7 +665,7 @@ produce_map(Rarespec_reg_quantitative,"regionally_rare_sp_abundance", "Regionall
 
 ```{r regsp_occurences}
 
-Rarespec_reg_qualitative_count <- Rarespec_reg_qualitative %>%
+Rarespec_reg_count <- Rarespec_reg %>%
   group_by(ScientificName) %>% 
   summarise(occurence_data_present = n(), .groups="drop") %>%
   st_drop_geometry()
@@ -656,15 +675,17 @@ Rarespec_reg_quantitative_count <- Rarespec_reg_quantitative %>%
   summarise(abundance_data_present = n(), .groups="drop") %>%
   st_drop_geometry()
 
-print(kbl(list(Rarespec_reg_qualitative_count,Rarespec_reg_quantitative_count))%>%
+print(kbl(list(Rarespec_reg_count,Rarespec_reg_quantitative_count))%>%
   kable_classic(full_width = F, html_font = "Cambria"))
 
-write.csv(Rarespec_reg_qualitative_count, file = file.path(Output, paste0(OutputFileName,"_region_rare_sp_occurence_count.csv")), row.names = FALSE)
+
+write.csv(Rarespec_reg_count, file = file.path(Output, paste0(OutputFileName,"_region_rare_sp_count.csv")), row.names = FALSE)
 write.csv(Rarespec_reg_quantitative_count, file = file.path(Output, paste0(OutputFileName,"_region_rare_sp_abundance_count.csv")), row.names = FALSE)
+
 
 ```
 
-#### 7.2.3 Rare species list on National Scale
+#### 7.1.3 Rare species list on National Scale
 
 This part need extra steps:
 
@@ -713,13 +734,14 @@ RareSpecList_nation<-RareSpecList2_nation[which(RareSpecList2_nation$grid_id<=(N
 
 ```{r natsp_distribution}
 
-Rarespec_nat_qualitative <- Qualitative_data[Qualitative_data$ScientificName %in% RareSpecList_nation$ScientificName,]
-st_write(Rarespec_nat_qualitative, file.path(Output,"nationally_rare_species_occurence_distribution.shp"), append = FALSE)
-produce_map(Rarespec_nat_qualitative,"nationally_rare_sp_occurence", "Nationally rare species occurence data available")
+Rarespec_nat <- assessment_data[assessment_data$ScientificName %in% RareSpecList_nation$ScientificName,]
+st_write(Rarespec_nat, file.path(Output,"nationally_rare_species_distribution.shp"), append = FALSE)
+produce_map(Rarespec_nat,"nationally_rare_sp", "Nationally rare species data available")
 
 Rarespec_nat_quantitative <- Quantitative_data[Quantitative_data$ScientificName %in% RareSpecList_nation$ScientificName,]
 st_write(Rarespec_nat_quantitative, file.path(Output,"nationally_rare_species_abundance_distribution.shp"), append = FALSE)
 produce_map(Rarespec_nat_quantitative,"nationally_rare_sp_abundance", "Nationally rare species abundance data available")
+
 
 ```
 
@@ -727,7 +749,7 @@ produce_map(Rarespec_nat_quantitative,"nationally_rare_sp_abundance", "Nationall
 
 ```{r natsp_occurences}
 
-Rarespec_nat_qualitative_count <- Rarespec_nat_qualitative %>%
+Rarespec_nat_count <- Rarespec_nat %>%
   group_by(ScientificName) %>% 
   summarise(occurence_data_present = n(), .groups="drop") %>%
   st_drop_geometry()
@@ -737,15 +759,17 @@ Rarespec_nat_quantitative_count <- Rarespec_nat_quantitative %>%
   summarise(abundance_data_present = n(), .groups="drop") %>%
   st_drop_geometry()
 
-print(kbl(list(Rarespec_nat_qualitative_count,Rarespec_nat_quantitative_count))%>%
+print(kbl(list(Rarespec_nat_count,Rarespec_nat_quantitative_count))%>%
   kable_classic(full_width = F, html_font = "Cambria"))
 
-write.csv(Rarespec_nat_qualitative_count, file = file.path(Output, paste0(OutputFileName,"_nation_rare_sp_occurence_count.csv")), row.names = FALSE)
+
+write.csv(Rarespec_nat_count, file = file.path(Output, paste0(OutputFileName,"_nation_rare_sp_count.csv")), row.names = FALSE)
 write.csv(Rarespec_nat_quantitative_count, file = file.path(Output, paste0(OutputFileName,"_nation_rare_sp_abundance_count.csv")), row.names = FALSE)
+
 
 ```
 
-### 7.3 AQ1: Is the subzone characterised by the presence of many locally rare features?
+### 7.2 AQ1: Is the subzone characterised by the presence of many locally rare features?
 
 ```{r AQ1}
 if(!length(RareSpecList$ScientificName) == 0){
@@ -753,7 +777,7 @@ if(!length(RareSpecList$ScientificName) == 0){
   ## Loop through the whole data grid to check for the presence of rare species.
   # A value 5 is given if a rare species is detected in the grid, if not, a value 0 is given.
   for (i in 1:NpolID) {
-    grid_evaluated <- Qualitative_data[Qualitative_data$grid_id %in% PolIDs$grid_id[i],]
+    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
     grid_vector <- PolIDs$grid_id[i]
     for(j in 1:length(RareSpecList$ScientificName)){
       if (RareSpecList$ScientificName[j] %in% grid_evaluated$ScientificName){
@@ -769,7 +793,7 @@ if(!length(RareSpecList$ScientificName) == 0){
   QPRS2 <-  QPRS1 %>%
     mutate(average_value = rowMeans(.[-1])) %>%
     rename(grid_id = 1) %>% 
-    select(grid_id,average_value)
+    dplyr::select(grid_id,average_value)
   
   # Classification into five categories
   QPRS3<-QClassify(QPRS2, QPRS2$average_value, "QPRSCLASS")
@@ -777,18 +801,16 @@ if(!length(RareSpecList$ScientificName) == 0){
   QPRS<-QPRS3[c("grid_id","QPRSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QPRS,"QPRSCLASS","AQ1")
+  produce_map_sf(QPRS,"QPRSCLASS","AQ1", continous)
 } else {
   if(!exists("QPRS")) {
   QPRS<-PolIDs
   QPRS$QPRSCLASS<-NA}
 }
 
-produce_map_sf(QPRS,"QPRSCLASS","AQ1")
-
 ```
 
-### 7.4 AQ2: Is the subzone characterised by a high abundance of many locally rare features?
+### 7.3 AQ2: Is the subzone characterised by a high abundance of many locally rare features?
 
 ```{r AQ2}
 if(!length(RareSpecList$ScientificName) == 0){
@@ -813,7 +835,7 @@ if(!length(RareSpecList$ScientificName) == 0){
       summarise_at(vars(Density), list(average = mean), .groups="drop")
     # Get the lrf value for each subzone 
     df_lrf_value <- df_lrf_abundance_average %>% 
-      inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
+      inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName")]), by = "grid_id") %>% 
       mutate(lrf_value = 5*(average/max(average)))
     # Add the lrf_value to the final dataframe
     QHARSa <- left_join(QHARSa,df_lrf_value[,c(1,4)], by ="grid_id")
@@ -822,7 +844,7 @@ if(!length(RareSpecList$ScientificName) == 0){
   # Average the lrf_value results of all the species for each subzone into final metrics
   QHARSb <-  QHARSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.nan(.), NA, .))  %>% 
+    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
     select(grid_id,average_lrf_value)
   
   # Classification into five categories
@@ -831,7 +853,7 @@ if(!length(RareSpecList$ScientificName) == 0){
   QHARS<-QHARSc[c("grid_id", "QHARSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QHARS,"QHARSCLASS","AQ2")
+  produce_map_sf(QHARS,"QHARSCLASS","AQ2", continous)
 } else {
   if(!exists("QHARS")) {
   QHARS<-PolIDs
@@ -840,7 +862,7 @@ if(!length(RareSpecList$ScientificName) == 0){
 
 ```
 
-### 7.5 AQ3: Is the subzone characterised by the presence of many regionally rare features?
+### 7.4 AQ3: Is the subzone characterised by the presence of many regionally rare features?
 
 ```{r AQ3}
 if(!length(RareSpecList_region$ScientificName) == 0){
@@ -849,7 +871,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
   ## Loop through the whole data grid to check for the presence of rare species
   # A value 5 is given if the rare species is detected in the grid, if not, a value 0 is given
   for (i in 1:NpolID) {
-    grid_evaluated <- Qualitative_data[Qualitative_data$grid_id %in% PolIDs$grid_id[i],]
+    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
     grid_vector <- PolIDs$grid_id[i]
     for(j in 1:length(RareSpecList_region$ScientificName)){
       if (RareSpecList_region$ScientificName[j] %in% grid_evaluated$ScientificName){
@@ -875,7 +897,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
   QRRS<-QRRS3[c("grid_id","QRRSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QRRS,"QRRSCLASS","AQ3")
+  produce_map_sf(QRRS,"QRRSCLASS","AQ3", continous)
 } else {
   if(!exists("QRRS")) {
   QRRS<-PolIDs
@@ -885,7 +907,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
 
 ```
 
-### 7.6 AQ4: Is the subzone characterised by high abundance of many regionally rare features?
+### 7.5 AQ4: Is the subzone characterised by high abundance of many regionally rare features?
 
 ```{r AQ4}
 if(!length(RareSpecList_region$ScientificName) == 0){
@@ -910,7 +932,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
       summarise_at(vars(Density), list(average = mean), .groups="drop")
     # Get the lrf value for each subzone 
     df_lrf_value <- df_lrf_abundance_average %>% 
-      inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
+      inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName")]), by = "grid_id") %>% 
       mutate(lrf_value = 5*(average/max(average)))
     # Add the lrf value to the final dataframe
     QARRSa <- left_join(QARRSa,df_lrf_value[,c(1,4)], by ="grid_id")
@@ -919,7 +941,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
   # Average lrf value results of all the species for each subzone into final metrics 
   QARRSb <-  QARRSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.nan(.), NA, .))  %>% 
+    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
     select(grid_id,average_lrf_value)
   
   # Classification into five categories
@@ -928,7 +950,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
   QARRS<-QARRSc[c("grid_id", "QARRSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QARRS,"QARRSCLASS","AQ4")
+  produce_map_sf(QARRS,"QARRSCLASS","AQ4", continous)
 } else {
   if(!exists("QARRS")) {
   QARRS<-PolIDs
@@ -936,7 +958,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
 }
 ```
 
-### 7.7 AQ5: Is the subzone characterised by the presence of many nationally rare features?
+### 7.6 AQ5: Is the subzone characterised by the presence of many nationally rare features?
 
 ```{r AQ5}
 if(!length(RareSpecList_nation$ScientificName) == 0){
@@ -944,7 +966,7 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
   ## Loop through the whole data grid to check for the presence of rare species
   # A value 5 is given if the rare species is detected in the grid, if not, a value 0 is given
   for (i in 1:NpolID) {
-    grid_evaluated <- Qualitative_data[Qualitative_data$grid_id %in% PolIDs$grid_id[i],]
+    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
     grid_vector <- PolIDs$grid_id[i]
     for(j in 1:length(RareSpecList_nation$ScientificName)){
       if (RareSpecList_nation$ScientificName[j] %in% grid_evaluated$ScientificName){
@@ -969,7 +991,7 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
   QNRS<-QNRS3[c("grid_id","QNRSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QNRS,"QNRSCLASS","AQ5")
+  produce_map_sf(QNRS,"QNRSCLASS","AQ5", continous)
 } else {
   if(!exists("QNRS")) {
   QNRS<-PolIDs
@@ -977,7 +999,7 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
 }
 ```
 
-### 7.8 AQ6: Is the subzone characterised by high abundance of many nationally rare features?
+### 7.7 AQ6: Is the subzone characterised by high abundance of many nationally rare features?
 
 ```{r AQ6}
 if(!length(RareSpecList_nation$ScientificName) == 0){
@@ -1002,7 +1024,7 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
       summarise_at(vars(Density), list(average = mean), .groups="drop")
     # get the lrf value for each subzones 
     df_lrf_value <- df_lrf_abundance_average %>% 
-      inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
+      inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName")]), by = "grid_id") %>% 
       mutate(lrf_value = 5*(average/max(average)))
     # add lrf value to final dataframe
     QANRSa <- left_join(QANRSa,df_lrf_value[,c(1,4)], by ="grid_id")
@@ -1011,7 +1033,7 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
   # Average lrf_value results of all the species for each subzone into final metrics 
   QANRSb <-  QANRSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.nan(.), NA, .))  %>% 
+    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
     select(grid_id,average_lrf_value)
   
   # Classification into five categories
@@ -1020,7 +1042,7 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
   QANRS<-QANRSc[c("grid_id", "QANRSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QANRS,"QANRSCLASS","AQ6")
+  produce_map_sf(QANRS,"QANRSCLASS","AQ6", continous)
 } else {
   if(!exists("QANRS")) {
   QANRS<-PolIDs
@@ -1028,15 +1050,15 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
 }
 ```
 
-### 7.9 AQ7: Is the number of features in the subzone high?
+### 7.8 AQ7: Is the number of features in the subzone high?
 
 ```{r AQ7}
 QNFH1 <- data.frame()
-features_present <- unique(Qualitative_data$ScientificName)
+features_present <- unique(assessment_data$ScientificName)
 ## Loop through all the grid with data, to check for the presence of rare species
 # THe value 5 is given if the rare species is detected in the grid, if not, the value 0 is given
 for (i in 1:NpolID) {
-  grid_evaluated <- Qualitative_data[Qualitative_data$grid_id %in% PolIDs$grid_id[i],]
+  grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
   grid_vector <- PolIDs$grid_id[i]
   for(j in features_present){
     if (j %in% grid_evaluated$ScientificName){
@@ -1061,14 +1083,14 @@ QNFH3<-QClassify(QNFH2, QNFH2$average_value, "QNFHCLASS")
 QNFH<-QNFH3[c("grid_id","QNFHCLASS")]
 
 # Produce map of the results
-produce_map_sf(QNFH,"QNFHCLASS","AQ7")
+produce_map_sf(QNFH,"QNFHCLASS","AQ7", continous)
 
 if(!exists("QNFH")) {
   QNFH<-PolIDs
   QNFH$QNFHCLASS<-NA}
 ```
 
-### 7.10 AQ8: Is the subzone characterised by high counts of many species?
+### 7.9 AQ8: Is the subzone characterised by high counts of many species?
 
 ```{r AQ8}
 ### QHCMS Step1 ### Determine the species which are regularly occurring in your study area by selecting all species which occur in more than 5 % of your records (this is done to exclude rare species from the species list).
@@ -1097,7 +1119,7 @@ if (length(CommonSpecList_quant) > 0){
   # get the lrf value for each subzones 
   df_lrf_value <- df_lrf_abundance_average %>% 
     inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
-    mutate(lrf_value = 5*(average/max(average)))
+    mutate(lrf_value = ifelse(is.na(average), NA, 5 * (average / max(average, na.rm = TRUE))))
   # add lrf value to final dataframe
   QHCMSa <- left_join(QHCMSa,df_lrf_value[,c(1,4)], by ="grid_id")
 }
@@ -1105,7 +1127,7 @@ if (length(CommonSpecList_quant) > 0){
   # average lrf_value results of all the species for each subzone into final metrics 
   QHCMSb <-  QHCMSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.nan(.), NA, .))  %>% 
+    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
     select(grid_id,average_lrf_value)
   
   # CLassify into 5 categories
@@ -1114,7 +1136,7 @@ if (length(CommonSpecList_quant) > 0){
   QHCMS<-QHCMSc[c("grid_id", "QHCMSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QHCMS,"QHCMSCLASS","AQ8")
+  produce_map_sf(QHCMS,"QHCMSCLASS","AQ8", continous)
 } else {
   if(!exists("QHCMS")) {
   QHCMS<-PolIDs
@@ -1123,7 +1145,7 @@ if (length(CommonSpecList_quant) > 0){
 
 ```
 
-### 7.11 AQ 9: Is the abundance of certain species very high in the subzone?
+### 7.10 AQ 9: Is the abundance of certain species very high in the subzone?
 
 ```{r AQ9}
 
@@ -1206,7 +1228,7 @@ QHACS<-merge(PolIDs, QHACS, by="grid_id", all.x=TRUE)
 QHACS<-QHACS[c("grid_id","QHACSCLASS")]  
 
 # Produce map of the results
-produce_map_sf(QHACS,"QHACSCLASS","AQ9")
+produce_map_sf(QHACS,"QHACSCLASS","AQ9", continous)
 } else {
   if(!exists("QHACS")) {
   QHACS<-PolIDs  
@@ -1215,7 +1237,7 @@ produce_map_sf(QHACS,"QHACSCLASS","AQ9")
 
 ```
 
-### 7.12 AQ 10: Is the presence of ecologically significant features high in the subzone?
+### 7.111 AQ 10: Is the presence of ecologically significant features high in the subzone?
 
 ```{r AQ10}
 if(length(ESS) > 0){
@@ -1223,7 +1245,7 @@ if(length(ESS) > 0){
   
   # Test if the ES species is found in the data
   for(j in ESS){
-    info_presence <- Qualitative_data[which(Qualitative_data$ScientificName %in% j), ]
+    info_presence <- assessment_data[which(assessment_data$ScientificName %in% j), ]
     if(dim(info_presence)[1] == 0){
       ESS_list <- ESS_list[!ESS_list == j]
     }
@@ -1233,7 +1255,7 @@ if(length(ESS) > 0){
   ## Loop through the whole data grid to check for the presence of the ES species
   # A value 5 is given if the ES species is detected in the grid, if not, the value 0 is given
   for (i in 1:NpolID) {
-    grid_evaluated <- Qualitative_data[Qualitative_data$grid_id %in% PolIDs$grid_id[i],]
+    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
     grid_vector <- PolIDs$grid_id[i]
     for(k in ESS_list){
       if (k %in% grid_evaluated$ScientificName){
@@ -1258,7 +1280,7 @@ if(length(ESS) > 0){
   qual_QESS<-qual_QESS3[c("grid_id","qual_QESSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(qual_QESS,"qual_QESSCLASS","AQ10")
+  produce_map_sf(qual_QESS,"qual_QESSCLASS","AQ10", continous)
 } else {
   qual_QESS<-PolIDs
   qual_QESS$qual_QESSCLASS<-NA
@@ -1266,7 +1288,7 @@ if(length(ESS) > 0){
 
 ```
 
-### 7.13 AQ 11: Is the abundance of ecologically significant features high in the subzone?
+### 7.12 AQ 11: Is the abundance of ecologically significant features high in the subzone?
 
 ```{r AQ11}
 if(length(ESS) > 0){
@@ -1292,7 +1314,7 @@ if(length(ESS) > 0){
     # get the lrf value for each subzones 
     df_lrf_value <- df_lrf_abundance_average %>% 
       inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
-      mutate(lrf_value = 5*(average/max(average)))
+      mutate(lrf_value = ifelse(is.na(average), NA, 5 * (average / max(average, na.rm = TRUE))))
     # add lrf value to final dataframe
     QESSa <- left_join(QESSa,df_lrf_value[,c(1,4)], by ="grid_id")
   }
@@ -1300,7 +1322,7 @@ if(length(ESS) > 0){
   # average lrf_value results of all the species for each subzone into final metrics 
   QESSb <-  QESSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.nan(.), NA, .))  %>% 
+    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
     select(grid_id,average_lrf_value)
   
   # Classification into five categories
@@ -1309,14 +1331,14 @@ if(length(ESS) > 0){
   QESS<-QESSc[c("grid_id", "QESSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(QESS,"QESSCLASS","AQ11")
+  produce_map_sf(QESS,"QESSCLASS","AQ11", continous)
 } else {
   QESS<-PolIDs
   QESS$QESSCLASS<-NA
 }
 ```
 
-### 7.14 AQ 12: Is the presence of habitat-forming species (or species formed habitats i.e. biogenic habitats) high in the subzone?
+### 7.13 AQ 12: Is the presence of habitat-forming species (or species formed habitats i.e. biogenic habitats) high in the subzone?
 
 ```{r AQ12}
 if(length(HFKS) > 0){
@@ -1324,7 +1346,7 @@ if(length(HFKS) > 0){
   
   # Test if the HFK species is present in the data
   for(j in HFKS){
-    info_presence <- Qualitative_data[which(Qualitative_data$ScientificName %in% j), ]
+    info_presence <- assessment_data[which(assessment_data$ScientificName %in% j), ]
     if(dim(info_presence)[1] == 0){
       HFKS_list <- HFKS_list[!HFKS_list == j]
     }
@@ -1334,7 +1356,7 @@ if(length(HFKS) > 0){
   ## Loop through the whole date grid to check for the presence of HFK species
   # A value 5 is given if the HFK species is detected in the grid, if not, the value 0 is given
   for (i in 1:NpolID) {
-    grid_evaluated <- Qualitative_data[Qualitative_data$grid_id %in% PolIDs$grid_id[i],]
+    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
     grid_vector <- PolIDs$grid_id[i]
     for(k in HFKS_list){
       if (k %in% grid_evaluated$ScientificName){
@@ -1359,14 +1381,14 @@ if(length(HFKS) > 0){
   qual_QHFKS<-qual_QHFKS3[c("grid_id","qual_QHFKSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(qual_QHFKS,"qual_QHFKSCLASS","AQ12")
+  produce_map_sf(qual_QHFKS,"qual_QHFKSCLASS","AQ12", continous)
 } else {
   qual_QHFKS<-PolIDs
   qual_QHFKS$qual_QHFKSCLASS<-NA
 }
 ```
 
-### 7.15 AQ 13: Is the abundance of habitat-forming species (or species formed habitats i.e. biogenic habitats) high in the subzone?
+### 7.14 AQ 13: Is the abundance of habitat-forming species (or species formed habitats i.e. biogenic habitats) high in the subzone?
 
 ```{r AQ13}
 if(length(HFKS) > 0){
@@ -1394,7 +1416,7 @@ if(length(HFKS) > 0){
     # get the lrf value for each subzones 
     df_lrf_value <- df_lrf_abundance_average %>% 
       inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
-      mutate(lrf_value = 5*(average/max(average)))
+      mutate(lrf_value = ifelse(is.na(average), NA, 5 * (average / max(average, na.rm = TRUE))))
     # add lrf value to final dataframe
     QHFKSa <- left_join(QHFKSa,df_lrf_value[,c(1,4)], by ="grid_id")
   }
@@ -1402,7 +1424,7 @@ if(length(HFKS) > 0){
   # average lrf_value results of all the species for each subzone into final metrics 
   QHFKSb <-  QHFKSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.nan(.), NA, .))  %>% 
+    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
     select(grid_id,average_lrf_value)
   
   # Classification into five categories
@@ -1411,14 +1433,14 @@ if(length(HFKS) > 0){
   QHFKS<-QHFKSc[c("grid_id", "QHFKSCLASS")]
 
   # Produce map of the results
-  produce_map_sf(QHFKS,"QHFKSCLASS","AQ13")
+  produce_map_sf(QHFKS,"QHFKSCLASS","AQ13", continous)
 } else {
   QHFKS<-PolIDs
   QHFKS$QHFKSCLASS<-NA
 }
 ```
 
-### 7.16 AQ 14: Is the presence of mutualist or symbiotic species high in the subzone?
+### 7.15 AQ 14: Is the presence of mutualist or symbiotic species high in the subzone?
 
 ```{r AQ14}
 if(length(MSS) > 0){
@@ -1426,7 +1448,7 @@ if(length(MSS) > 0){
   
   # Test if the HFK species is found in the data
   for(j in MSS){
-    info_presence <- Qualitative_data[which(Qualitative_data$ScientificName %in% j), ]
+    info_presence <- assessment_data[which(assessment_data$ScientificName %in% j), ]
     if(dim(info_presence)[1] == 0){
       MSS_list <- MSS_list[!MSS_list == j]
     }
@@ -1436,7 +1458,7 @@ if(length(MSS) > 0){
   ## Loop through the whole data grid to check for the presence of HFK species
   # A value 5 is given if the HFK species is detected in the grid, if not, the value 0 is given
   for (i in 1:NpolID) {
-    grid_evaluated <- Qualitative_data[Qualitative_data$grid_id %in% PolIDs$grid_id[i],]
+    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
     grid_vector <- PolIDs$grid_id[i]
     for(k in MSS_list){
       if (k %in% grid_evaluated$ScientificName){
@@ -1461,7 +1483,7 @@ if(length(MSS) > 0){
   qual_QMSS<-qual_QMSS3[c("grid_id","qual_QMSSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(qual_QMSS,"qual_QMSSCLASS","AQ14")
+  produce_map_sf(qual_QMSS,"qual_QMSSCLASS","AQ14", continous)
 } else {
   qual_QMSS<-PolIDs
   qual_QMSS$qual_QMSSCLASS<-NA
@@ -1469,7 +1491,7 @@ if(length(MSS) > 0){
   
 ```
 
-### 7.17 AQ 15: Is the abundance of symbiotic species high in the subzone?
+### 7.16 AQ 15: Is the abundance of symbiotic species high in the subzone?
 
 ```{r AQ15}
 if(length(MSS) > 0){
@@ -1496,7 +1518,7 @@ if(length(MSS) > 0){
     # get the lrf value for each subzones 
     df_lrf_value <- df_lrf_abundance_average %>% 
       inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
-      mutate(lrf_value = 5*(average/max(average)))
+      mutate(lrf_value = ifelse(is.na(average), NA, 5 * (average / max(average, na.rm = TRUE))))
     # add lrf value to final dataframe
     QMSSa <- left_join(QMSSa,df_lrf_value[,c(1,4)], by ="grid_id")
   }
@@ -1504,7 +1526,7 @@ if(length(MSS) > 0){
   # Average lrf value results of all the species for each subzone into final metrics 
   QMSSb <-  QMSSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.nan(.), NA, .))  %>% 
+    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
     select(grid_id,average_lrf_value)
   
   # Classification into five categories
@@ -1513,7 +1535,7 @@ if(length(MSS) > 0){
   QMSS<-QMSSc[c("grid_id", "QMSSCLASS")]
 
   # Produce map of the results
-  produce_map_sf(QMSS,"QMSSCLASS","AQ15")
+  produce_map_sf(QMSS,"QMSSCLASS","AQ15", continous)
 } else {
   QMSS<-PolIDs
   QMSS$QMSSCLASS<-NA
@@ -1577,9 +1599,8 @@ EcoCompQ$SumQ<-SumQ
 EcoCompQ$LenQ<-LenQ
 
 
-EcoCompQ$Total_unclassified<-SumQ/LenQ
-EcoCompQ <-QClassify(EcoCompQ, EcoCompQ$Total_unclassified, "Total")
-
+EcoCompQ$Total <- SumQ/LenQ
+# Add grid ID to the dataframe
 EcoCompQ<-data.frame(cbind(PolIDs, EcoCompQ))
 
 # Combine the final score with the grid geometry.
@@ -1596,25 +1617,54 @@ st_write(Result_final, file.path(Output, paste0(OutputFileName,"_layers.shp")), 
 ## 9. Plot the components results on a map
 
 **Plot total score**
+## Map for AQ and total score
+
 
 ```{r plottot, message=FALSE, warning=FALSE, results='hide'}
-ggplot()+
-  geom_sf(data = Result_final$geometry, aes(fill = factor(Result_final$Total)), lwd = 0, colour = "grey90") +
-  scale_fill_manual(values = viridisLite::viridis(5), name = "Total", limits = c(1,2,3,4,5), na.value = "grey94", labels = c(
-    "1" = "Very Low",
-    "2" = "Low",
-    "3" = "Medium",
-    "4" = "High",
-    "5" = "Very High"
-  ), drop = FALSE) +
-  geom_sf(data = world_data$geometry) +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
-        axis.text.x=element_text(angle=300,hjust=0))
 
+if (continous == TRUE){
+  print(ggplot()+
+   geom_sf(data = Result_final$geometry,lwd = 0) +
+   geom_sf(data = Result_final, aes(fill=Result_final$Total), colour = "grey90", lwd = 0) + 
+   scale_fill_viridis_c(name = "Total", na.value = "grey94", limits = c(0,5)) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0)))
 ggsave(filename=file.path(Output, paste0(OutputFileName,"_totalscore.png")),
-      width = NA,
-      height = NA,
-      units = "cm",
-      dpi=1600)
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+} else{
+  # Define the categories and colors
+  categories <- c("0 - 1", "1 - 2", "2 - 3", "3 - 4", "4 - 5")
+  mycolors <- viridisLite::viridis(5) 
+  # Create categories with explicit levels
+  Result_final$category_graph <- cut(
+      Result_final$Total,
+      breaks = c(0, 1, 2, 3, 4, 5),
+      include.lowest = TRUE,
+      labels = categories,
+      # Force creation of all levels
+      right = FALSE,
+      # Ensure that all levels are present
+      levels = categories
+  )
+  print(ggplot()+
+   geom_sf(data = Result_final$geometry,lwd = 0) +
+   geom_blank() +
+   geom_sf(data = Result_final, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + # show.legend allow to have colors in legend even for categories without data points
+   scale_fill_manual(values = mycolors, name = "Total", limits = categories, na.value = "grey94", 
+                     labels = categories, drop = FALSE) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0))
+   )
+ggsave(filename=file.path(Output, paste0(OutputFileName,"_totalscore.png")),
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+}
 
 ```

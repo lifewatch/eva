@@ -160,7 +160,7 @@
       "@type": "SoftwareApplication",
       "identifier": "https://cran.r-project.org/package=ggplot2",
       "name": "ggplot2",
-      "version": "3.4.4"
+      "version": "3.5.1"
     }
   },
   "isPartOf": "{link of other things this repository is part of (e.g. GitHub repo, workflows, datasets, ...}",
