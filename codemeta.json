@@ -14,7 +14,7 @@
     {
     "@type": "ComputerLanguage",
     "name": "Python",
-    "url": "https://www.python.org/",
+    "url": "https://www.python.org/"
     },
     {"@type": "ComputerLanguage",
     "name": "R",
