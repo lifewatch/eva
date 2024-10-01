@@ -1,7 +1,7 @@
 ---
 title: "Ecological valuation assessment"
 author: "Marie-Catherine Bouquieaux, Willem Boone, Hanneloor Heynderickx"
-date: "22/03/2024"
+date: "01/10/2024"
 output:
   pdf_document: 
     toc: true
@@ -68,10 +68,17 @@ lapply(c(my_packages), require, character.only = TRUE)
 
 **quantile_classification**: Please indicate TRUE if you prefer to utilize a distribution-based method for classifying your results, where the categories are determined by quantiles (20,40,60,80,100). If FALSE is enter, specific categories will be used and can be changed/defined in point 7. 
 
+**CreateGrid:** create a grid for subzones. TRUE or FALSE parameter. (alternative to using shapefile polygons).
+
 ```{r setting1}
 ## Path settings for input and output data
 Input<-"~/Documents/EVA_process/output/"
 Output<-"~/Documents/EVA_process/final_EV/"
+
+## Test if output path exists, if not create it 
+if (!dir.exists(Output)) {
+  dir.create(Output, recursive = TRUE)
+}
 
 # List of files: 
 list_EC_result_3km <- c("EVA_EC_bird_layers.shp","EVA_EC_fish_layers.shp","EVA_EC_mammal_layers.shp","EVA_EC_phytoplankton_layers.shp","EVA_EC_zooplankton_layers.shp")
@@ -90,14 +97,32 @@ BBT_coordinates <- "~/Documents/EVA_process/BBT_coordinates/centerlinev2_20kmbuf
 # If a specific layers need to be used, enter name here:
 BBT_layer <- ""
 
+# Create grid? 
+CreateGrid<-TRUE
+
 #Show result with continous scale or with discrete variables
 continous <- TRUE
 
 ```
 
-### 2.2 Get surrounding country map information
+### 2.2 Get surrounding country map information and BBT/grid coordinates
 
-Change x and y limit to what is required for your BBT.
+Loading the coordinates of the BBT and compute its
+projection in the appropriate format.
+
+```{r bbtcoord, message=FALSE, warning=FALSE, results='hide'}
+# You should have specify the path/name of your file above, as well as the layer name is any is present
+if (nchar(BBT_layer) > 0){
+  polygon_bbt <- st_read(BBT_coordinates, layer = BBT_layer)
+} else {
+  polygon_bbt <- st_read(BBT_coordinates)
+}
+# Change projection of the coordinates to ease the grid calculation
+Polygon_coordinated_32631 <- st_transform(polygon_bbt, crs = st_crs(32631))
+
+```
+
+**Get surrounding country map information**
 
 ```{r world_data}
 world_data <- ne_countries(scale = "medium", returnclass = "sf") |>
@@ -105,12 +130,40 @@ world_data <- ne_countries(scale = "medium", returnclass = "sf") |>
   sf::st_crop(c(xmin= xmin, xmax = xmax, ymin = ymin, ymax = ymax))
 ```
 
+**Get GRID coordinates**
+
+```{r bbtcoord_map}
+Polygon_coordinated_4326 <- Polygon_coordinated_32631 %>% 
+  sf::st_transform(crs="EPSG:4326")
+
+if(CreateGrid==FALSE){ #to check
+  # If your file contains different layers, specify which one should be used by entering the option : layer = "name"'
+  # If there are no different layers present, remove the option layer = "name"
+  GRD <- st_read(SubzoneShapeName)
+  # Change projection of the coordinates to ease the grid calculation.
+  Polygon_coordinated_32631 <- st_transform(polygon_bbt, crs = st_crs(32631))
+  # Create a dataframe with both the grid_polygon and grid_id for each subzone.
+  grid_polygons_sf <- st_sf(grid_id = seq_along(GRD[Polygon_coordinated_32631$geom]), 
+                          geometry = GRD[Polygon_coordinated_32631$geom], crs = 32631)
+  
+} else if(CreateGrid==TRUE){
+  # Create grid 
+  GRD <- st_make_grid(Polygon_coordinated_32631$geom, cellsize = 3000, square = FALSE)
+  
+  # Create a dataframe with both the grid_polygon and grid_id for each subzone.
+  grid_polygons_sf <- st_sf(grid_id = seq_along(GRD[Polygon_coordinated_32631$geom]), 
+                          geometry = GRD[Polygon_coordinated_32631$geom], crs = 32631)
+}
+
+GRID_degree_4326 <- st_transform(grid_polygons_sf,crs="EPSG:4326")
+
+```
 
 ## 3. Rescaling of the 250m grid
 
 If you have EC that have been calculated using a 250m grid, please run the following code to resize it to a 3km grid.
 
-### Resize the smaller grid
+### 3.1 Resize the smaller grid
 
 ```{r}
 if ( any(nchar(list_EC_result_250m) > 0 )){
@@ -138,7 +191,8 @@ if ( any(nchar(list_EC_result_250m) > 0 )){
   hexagons_250 <- st_transform(grid_polygons_sf_250, crs = "EPSG:4326")
   hexagons_3000 <- st_transform(grid_polygons_sf_3km, crs = "EPSG:4326")
   
-  inside_grid <- st_join(st_centroid(hexagons_250),hexagons_3000, join = st_intersects) #250m grid associated to one 3km hexagon
+  #250m grid associated to one 3km hexagon
+  inside_grid <- st_join(st_centroid(hexagons_250),hexagons_3000, join = st_intersects) 
   inside_grid <- st_drop_geometry(inside_grid) 
   
   
@@ -176,7 +230,7 @@ if ( any(nchar(list_EC_result_250m) > 0 )){
 data_EC <- data.frame()
 for(i in 1:length(list_EC_result_3km)){
   data_current <- st_read(paste0(Input,list_EC_result_3km[i]))
-  data_current <- data_current[,c("grid_id","Total","geometry")]
+  data_current <- data_current[,c("grid_id","Total","geometry","conf_score","nb_sample")]
   data_current$EC <- list_EC_result_3km[i]
   data_EC <- rbind(data_EC,data_current) 
 }
@@ -188,16 +242,12 @@ if(exists('data_EC_rescaled') && is.data.frame(get('data_EC_rescaled'))){
   data_EC <- rbind(data_EC,data_geometry)
 }
 
-data_EC_total_valuation <- data_EC %>%
-  st_drop_geometry() %>%
-  group_by(grid_id) %>% 
-  dplyr::summarise_at(vars(Total), list(Total_EV = mean), .groups="drop", na.rm=TRUE)
-
-grid_polygons_sf <- data_EC[unique(data_EC$grid_id),c( "grid_id", "geometry")]
-
-BBT_EC_EV <- BBT_EC_EVa %>%
-  mutate_all(~ifelse(is.nan(.), NA, .)) %>%
-  inner_join(grid_polygons_sf, by = "grid_id")
+BBT_EC_EV <- data_EC %>%
+  group_by(grid_id, geometry) %>% 
+  summarise(Total_EV = mean(Total, na.rm = TRUE),
+            conf_score_EV = mean(conf_score, na.rm = TRUE),
+            total_sample = sum(nb_sample,na.rm = TRUE),
+            EC_used = sum(!is.na(conf_score)))
 
 # Export the results to a shapefile
 st_write(BBT_EC_EV, file.path(Output,"BBT_final_EV_layers.shp"), append = FALSE)
@@ -209,14 +259,15 @@ st_write(BBT_EC_EV, file.path(Output,"BBT_final_EV_layers.shp"), append = FALSE)
 
 **Plot EV score**
 
-```{r plot_final+score, message=FALSE, warning=FALSE, results='hide'}
+```{r plot_final_score, message=FALSE, warning=FALSE, results='hide'}
 if (continous == TRUE){
   print(ggplot()+
    geom_sf(data = BBT_EC_EV$geometry,lwd = 0) +
    geom_sf(data = BBT_EC_EV, aes(fill=BBT_EC_EV$Total_EV), colour = "grey90", lwd = 0) + 
    scale_fill_viridis_c(name = "Ecological Valuation score", na.value = "grey94", limits = c(0,5)) +
    geom_sf(data = world_data$geometry) +
-   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
          axis.text.x=element_text(angle=300,hjust=0)))
 ggsave(filename=file.path(Output, "Total_Valutation_Score.png"),
     width = NA,
@@ -241,14 +292,72 @@ ggsave(filename=file.path(Output, "Total_Valutation_Score.png"),
   print(ggplot()+
    geom_sf(data = BBT_EC_EV$geometry,lwd = 0) +
    geom_blank() +
-   geom_sf(data = BBT_EC_EV, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + # show.legend allow to have colors in legend even for categories without data points
-   scale_fill_manual(values = mycolors, name = "Ecological Valuation score", limits = categories, na.value = "grey94", 
+   geom_sf(data = BBT_EC_EV, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + 
+     # show.legend allow to have colors in legend even for categories without data points
+   scale_fill_manual(values = mycolors, name = "Ecological Valuation score", 
+                     limits = categories, na.value = "grey94", 
                      labels = categories, drop = FALSE) +
    geom_sf(data = world_data$geometry) +
-   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
          axis.text.x=element_text(angle=300,hjust=0))
    )
 ggsave(filename=file.path(Output, "Total_Valutation_Score.png"),
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+}
+
+```
+
+**Plot EV confidence score**
+
+``` {r plot_conf_score}
+
+if (continous == TRUE){
+  print(ggplot()+
+   geom_sf(data = BBT_EC_EV$geometry,lwd = 0) +
+   geom_sf(data = BBT_EC_EV, aes(fill=conf_score_EV), colour = "grey90", lwd = 0) + 
+   scale_fill_viridis_c(name = "Confidence Score", na.value = "grey94", limits = c(0,5)) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0)))
+ggsave(filename=file.path(Output, "Total_confidence_score.png"),
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+} else{
+  # Define the categories and colors
+  categories <- c("0 - 1", "1 - 2", "2 - 3", "3 - 4", "4 - 5")
+  mycolors <- viridisLite::viridis(5) 
+  # Create categories with explicit levels
+  BBT_EC_EV$category_graph <- cut(
+      BBT_EC_EV$conf_score_EV,
+      breaks = c(0, 1, 2, 3, 4, 5),
+      include.lowest = TRUE,
+      labels = categories,
+      # Force creation of all levels
+      right = FALSE,
+      # Ensure that all levels are present
+      levels = categories
+  )
+  print(ggplot()+
+   geom_sf(data = BBT_EC_EV$geometry,lwd = 0) +
+   geom_blank() +
+   geom_sf(data = BBT_EC_EV, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + 
+     # show legend allow to have colors in legend even for categories without data points
+   scale_fill_manual(values = mycolors, name = "Confidence Score", 
+                     limits = categories, na.value = "grey94", 
+                     labels = categories, drop = FALSE) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0))
+   )
+ggsave(filename=file.path(Output, "Total_confidence_score.png"),
     width = NA,
     height = NA,
     units = "cm",

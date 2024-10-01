@@ -1,7 +1,7 @@
 ---
 title: "Ecological valuation assessment"
 author: "Marie-Catherine Bouquieaux, Willem Boone, Hanneloor Heynderickx"
-date: "22/03/2024"
+date: "01/10/2024"
 output:
   pdf_document: 
       toc: true
@@ -63,6 +63,7 @@ lapply(c(my_packages), require, character.only = TRUE)
 **REMINDER**  
 Please ensure that you clean your R-environment before running the next ecological component.  
 
+
 ### 2.1 Define the working environment
 
 **InputFile**: Input file containing the data for an
@@ -91,15 +92,24 @@ used as limit on the map; must be provided in degrees.
 **ymin/ymax**: Minimum and maximum latitude value to be used
 as limit on the map; must be provided in degrees.
 
-**quantile_classification**: Please indicate TRUE if you prefer to utilize a distribution-based method for classifying your results, where the categories are determined by quantiles (20,40,60,80,100). If FALSE is enter, specific categories will be used and can be changed/defined in point 7. 
+**continuous**: Do you want your results to be displayed on a continuous scale (from 0 to 5) or on a categorical scale (5 categories: 1, 2, 3, 4 and 5)
+
+**expert_judgement**, **modelling_data** and **monitoring_data**: define what type of data has been used. You must choose one of the following option: expert_judgement, modelling data or monitoring data. Put TRUE for the one you used and FALSE for the other. 
+
+**component_habitat**: Define if the ecological component analysed is the benthic habitats. Put TRUE if it is, or FALSE for any other ecological component.
 
 ```{r setting1}
-## Path settings for input and output data
+### Path settings for input and output data
 InputFile<-"~/Documents/EVA_process/Data/EC_bird/EC_bird.csv"
 Output<-"~/Documents/EVA_process/output/"
 OutputFileName<-"EVA_EC_bird"
 
-## Path settings for the coordinates of the BBT
+### Test if output path exists, if not create it 
+if (!dir.exists(Output)) {
+  dir.create(Output, recursive = TRUE)
+}
+
+### Path settings for the coordinates of the BBT
 # Complete path and file name containing the BBT information
 BBT_coordinates <- "~/Documents/EVA_process/BBT_coordinates/centerlinev2_20kmbuffer.gpkg"
 # If a specific layers need to be used, enter name here. If there are no different layer, please leave empty: BBT_layer = ""
@@ -115,6 +125,14 @@ ymax <- 55.5
 
 #Show result with continous scale or with discrete variables
 continous <- TRUE
+
+# What type of data are you using? 
+expert_judgement <- FALSE
+modelling_data <- FALSE
+monitoring_data <- TRUE
+
+# Benthic habitat? 
+component_habitat <- FALSE
 
 ```
 
@@ -215,6 +233,9 @@ identifier for a location at a specific time, if this
 information is not present in your data, it will be
 calculated below but the column in itself **must** be
 present in your data.
+
+**Density**
+If the data used comes from modelling data, it is assumed that density represents the percentage of coverage of a specific feature over a subzone. This percentage must then be divided by 100 so that the density ranges from 0 to 1.
 
 Declare if the 'Date' or 'Abundance' still needs to be
 computed (TRUE or FALSE).
@@ -376,14 +397,15 @@ print(ggplot()+
 **Function to create the different maps produced in the script**
 
 ```{r function_map_sf}
-## Map for distribution of dataset and rare species 
+### Map for distribution of dataset and rare species 
 produce_map <- function(dataset,data_used, title){
   print(ggplot()+
      geom_point(data = dataset,aes(Longitude,Latitude), shape = ".") +
      geom_sf(data = grid_polygons_sf$geometry, fill = NA) +
      geom_sf(data = world_data$geometry) +
      ggtitle(title) +
-     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+           panel.background = element_blank(),
            axis.text.x=element_text(angle=300,hjust=0),plot.title=element_text(hjust=0.5)))
   ggsave(filename=file.path(Output, paste0(OutputFileName,"_",data_used,"_distribution",".png")),
       width = NA,
@@ -392,7 +414,7 @@ produce_map <- function(dataset,data_used, title){
       dpi=1600)
 }
 
-## Map for AQ and total score
+### Map for AQ and total score
 produce_map_sf <- function(dataset,class_column,name_AQ, continous){
   names(dataset)[names(dataset) %in% class_column] <- name_AQ
   # Combine the final score with the grid geometry.
@@ -406,7 +428,8 @@ produce_map_sf <- function(dataset,class_column,name_AQ, continous){
      geom_sf(data = add_grid_geometry, aes(fill=.data[[name_AQ]]), colour = "grey90", lwd = 0) + 
      scale_fill_viridis_c(name = name_AQ, na.value = "grey94", limits = c(0,5)) +
      geom_sf(data = world_data$geometry) +
-     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+           panel.background = element_blank(),
            axis.text.x=element_text(angle=300,hjust=0)))
   ggsave(filename=file.path(Output, paste0(OutputFileName,"_",name_AQ,".png")),
       width = NA,
@@ -431,7 +454,9 @@ produce_map_sf <- function(dataset,class_column,name_AQ, continous){
     print(ggplot()+
      geom_sf(data = add_grid_geometry$geometry,lwd = 0) +
      geom_blank() +
-     geom_sf(data = add_grid_geometry, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + # show.legend allow to have colors in legend even for categories without data points
+     geom_sf(data = add_grid_geometry, aes(fill=category_graph), colour = "grey90", 
+             lwd = 0, show.legend = TRUE) + 
+       # show.legend allow to have colors in legend even for categories without data points
      scale_fill_manual(values = mycolors, name = name_AQ, limits = categories, na.value = "grey94", 
                        labels = categories, drop = FALSE) +
      geom_sf(data = world_data$geometry) +
@@ -774,7 +799,7 @@ write.csv(Rarespec_nat_quantitative_count, file = file.path(Output, paste0(Outpu
 ```{r AQ1}
 if(!length(RareSpecList$ScientificName) == 0){
   QPRS1 <- data.frame()
-  ## Loop through the whole data grid to check for the presence of rare species.
+  # Loop through the whole data grid to check for the presence of rare species.
   # A value 5 is given if a rare species is detected in the grid, if not, a value 0 is given.
   for (i in 1:NpolID) {
     grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
@@ -868,7 +893,7 @@ if(!length(RareSpecList$ScientificName) == 0){
 if(!length(RareSpecList_region$ScientificName) == 0){
   
   QRRS1 <- data.frame()
-  ## Loop through the whole data grid to check for the presence of rare species
+  # Loop through the whole data grid to check for the presence of rare species
   # A value 5 is given if the rare species is detected in the grid, if not, a value 0 is given
   for (i in 1:NpolID) {
     grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
@@ -963,7 +988,7 @@ if(!length(RareSpecList_region$ScientificName) == 0){
 ```{r AQ5}
 if(!length(RareSpecList_nation$ScientificName) == 0){
   QNRS1 <- data.frame()
-  ## Loop through the whole data grid to check for the presence of rare species
+  # Loop through the whole data grid to check for the presence of rare species
   # A value 5 is given if the rare species is detected in the grid, if not, a value 0 is given
   for (i in 1:NpolID) {
     grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
@@ -1055,7 +1080,7 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
 ```{r AQ7}
 QNFH1 <- data.frame()
 features_present <- unique(assessment_data$ScientificName)
-## Loop through all the grid with data, to check for the presence of rare species
+# Loop through all the grid with data, to check for the presence of rare species
 # THe value 5 is given if the rare species is detected in the grid, if not, the value 0 is given
 for (i in 1:NpolID) {
   grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
@@ -1109,32 +1134,34 @@ for(i in CommonSpecList$ScientificName){
 
 if (length(CommonSpecList_quant) > 0){
   for(j in CommonSpecList_quant){
-  # get data for that species 
-  lrf_abundance <- Quantitative_data[Quantitative_data$ScientificName %in% j,] %>% st_drop_geometry()
-  # get average abundance for each subzones for that species
-  df_lrf_abundance_average <- lrf_abundance %>% 
-    select(grid_id, ScientificName,Density) %>% 
-    group_by(grid_id) %>% 
-    summarise_at(vars(Density), list(average = mean), .groups="drop")
-  # get the lrf value for each subzones 
-  df_lrf_value <- df_lrf_abundance_average %>% 
-    inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>% 
-    mutate(lrf_value = ifelse(is.na(average), NA, 5 * (average / max(average, na.rm = TRUE))))
-  # add lrf value to final dataframe
-  QHCMSa <- left_join(QHCMSa,df_lrf_value[,c(1,4)], by ="grid_id")
-}
+    # get data for that species
+    lrf_abundance <- Quantitative_data[Quantitative_data$ScientificName %in% j,] %>% st_drop_geometry()
+    if (dim(lrf_abundance)[1] > 2){
+      # get average abundance for each subzones for that species
+      df_lrf_abundance_average <- lrf_abundance %>%
+        dplyr::select(grid_id, ScientificName,Density) %>%
+        group_by(grid_id) %>%
+        summarise_at(vars(Density), list(average = mean), .groups="drop")
+      # get the lrf value for each subzones
+      df_lrf_value <- df_lrf_abundance_average %>%
+        inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>%
+        mutate(lrf_value = ifelse(is.na(average), NA, 5 * (average / max(average, na.rm = TRUE))))
+    } else next
+    
+    # add lrf value to final dataframe
+    QHCMSa <- left_join(QHCMSa,df_lrf_value[,c(1,4)], by ="grid_id")
+  }
   
-  # average lrf_value results of all the species for each subzone into final metrics 
+  # average lrf_value results of all the species for each subzone into final metrics
   QHCMSb <-  QHCMSa %>%
     mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.na(.), 0, .))  %>% 
-    select(grid_id,average_lrf_value)
+    mutate_all(~ifelse(is.na(.), 0, .))  %>%
+    dplyr::select(grid_id,average_lrf_value)
   
   # CLassify into 5 categories
   QHCMSc<-QClassify(QHCMSb, QHCMSb$average_lrf_value, "QHCMSCLASS")
   
   QHCMS<-QHCMSc[c("grid_id", "QHCMSCLASS")]
-  
   # Produce map of the results
   produce_map_sf(QHCMS,"QHCMSCLASS","AQ8", continous)
 } else {
@@ -1152,83 +1179,83 @@ if (length(CommonSpecList_quant) > 0){
 # At list 10 records with abundance data are needed, if less, this questions will not be calculated
 
 if (dim(EcoCompCommon_quant)[1] > 10){
-### QHACS Step1 ### Determine the species which are regularly occurring in your study area by selecting all species which occur in more than 5 % of the subzones (this is done to exclude rare species from the species list).
-
-#see EcoCompCommon
-
-### QHACS Step2 ### Determine the mean density of every species for the whole study area (= X).
-top5Perc<-(round(NpolID*5/100,digits=0))
-
-QHACS1<-aggregate(Density ~ grid_id+LocationNumber+FieldNumber+ScientificName,  
-                  data = EcoCompCommon_quant, sum)
-QHACS1a<-aggregate(Density ~ grid_id+LocationNumber+FieldNumber+ScientificName,  
-                   data = EcoCompCommon_quant, length)
-QHACS1$AvgDens<-QHACS1$Density/QHACS1a$Density
-
-QHACS2<-aggregate(AvgDens ~ grid_id+LocationNumber+ScientificName, data = QHACS1, sum)
-QHACS2a<-aggregate(AvgDens ~ grid_id+LocationNumber+ScientificName, data = QHACS1, length)
-QHACS2$AvgDensLoc<-QHACS2$AvgDens/QHACS2a$AvgDens
-
-QHACS3<-aggregate(AvgDensLoc ~ grid_id+ScientificName, data = QHACS2, sum)
-QHACS3a<-aggregate(AvgDensLoc ~ grid_id+ScientificName, data = QHACS2, length)
-QHACS3$AvgDensPol<-QHACS3$AvgDensLoc/QHACS3a$AvgDensLoc  #Xi
-
-# per species sum of densities of all subzones
-QHACS4<-aggregate(AvgDensPol ~ ScientificName, data = QHACS3, sum) 
-
-# Z (number of subzones for each species)
-QHACS4a<-aggregate(AvgDensPol ~ ScientificName, data = QHACS3, length) 
-
-# X (density of entire area)
-QHACS4$AvgDensTot<-QHACS4$AvgDensPol/QHACS4a$AvgDensPol   
-
-
-###QHACS Step3 ### Calculate the mean density of every species for every subzone (= Xi).
-
-#see QHACS3
-
-
-###QHACS Step4 ### Calculate the ratio Xi/X for every species in each subzone.
-
-QHACS5<-merge(QHACS3, QHACS4, by="ScientificName")
-QHACS5$XioverX<-QHACS5$AvgDensPol.x/QHACS5$AvgDensTot #Xi/X
-
-
-###QHACS Step5 ### Determine the 5 % subzones with the highest ratio.Calculate the percentage of the density of every species that occurs in the 5 % most important subzones.
-
-QHACS6<-xtabs(XioverX~grid_id+ScientificName, data=QHACS5)
-SumTop5<-function(t) sum(sort(t,decreasing=TRUE)[1:top5Perc])
-QHACS6a<-apply(QHACS6, 2, SumTop5)
-QHACS6b<-apply(QHACS6, 2, sum)
-QHACS7<-as.data.frame(cbind(QHACS4a,QHACS6a/QHACS6b))
-names(QHACS7)[2:3]<-c("Z", "Y")
-
-
-###QHACS Step6 ### Determine in how many subzones every species occurs (= Z).
-
-# see QHACS4a
-
-
-###QHACS Step7 ### Calculate the ratio Y/Z which is the aggregation coefficient for each species. 
-
-QHACS7$YoverZ<-QHACS7$Y/QHACS7$Z #(Y/Z)
-QHACS8<-merge(QHACS5, QHACS7, by="ScientificName")
-
-
-###QHACS Step8 ### Multiply the ratio Y/Z with the ratio Xi/X and divide these values in 5 classes with values between 1 and 5 (with an equal amount of subzones in each class).
-
-QHACS8$XioverXYoverZ<-QHACS8$XioverX*QHACS8$YoverZ   #Xi*Y/Z  
-QHACS9<-aggregate(XioverXYoverZ ~ grid_id, data=QHACS8, sum)  
-
-
-# Classification into five categories
-QHACS<-QClassify(QHACS9, QHACS9$XioverXYoverZ, "QHACSCLASS")   
-
-QHACS<-merge(PolIDs, QHACS, by="grid_id", all.x=TRUE)  
-QHACS<-QHACS[c("grid_id","QHACSCLASS")]  
-
-# Produce map of the results
-produce_map_sf(QHACS,"QHACSCLASS","AQ9", continous)
+  ### QHACS Step1 ### Determine the species which are regularly occurring in your study area by selecting all species which occur in more than 5 % of the subzones (this is done to exclude rare species from the species list).
+  
+  #see EcoCompCommon
+  
+  ### QHACS Step2 ### Determine the mean density of every species for the whole study area (= X).
+  top5Perc<-(round(NpolID*5/100,digits=0))
+  
+  QHACS1<-aggregate(Density ~ grid_id+LocationNumber+FieldNumber+ScientificName,  
+                    data = EcoCompCommon_quant, sum)
+  QHACS1a<-aggregate(Density ~ grid_id+LocationNumber+FieldNumber+ScientificName,  
+                     data = EcoCompCommon_quant, length)
+  QHACS1$AvgDens<-QHACS1$Density/QHACS1a$Density
+  
+  QHACS2<-aggregate(AvgDens ~ grid_id+LocationNumber+ScientificName, data = QHACS1, sum)
+  QHACS2a<-aggregate(AvgDens ~ grid_id+LocationNumber+ScientificName, data = QHACS1, length)
+  QHACS2$AvgDensLoc<-QHACS2$AvgDens/QHACS2a$AvgDens
+  
+  QHACS3<-aggregate(AvgDensLoc ~ grid_id+ScientificName, data = QHACS2, sum)
+  QHACS3a<-aggregate(AvgDensLoc ~ grid_id+ScientificName, data = QHACS2, length)
+  QHACS3$AvgDensPol<-QHACS3$AvgDensLoc/QHACS3a$AvgDensLoc  #Xi
+  
+  # per species sum of densities of all subzones
+  QHACS4<-aggregate(AvgDensPol ~ ScientificName, data = QHACS3, sum) 
+  
+  # Z (number of subzones for each species)
+  QHACS4a<-aggregate(AvgDensPol ~ ScientificName, data = QHACS3, length) 
+  
+  # X (density of entire area)
+  QHACS4$AvgDensTot<-QHACS4$AvgDensPol/QHACS4a$AvgDensPol   
+  
+  
+  ###QHACS Step3 ### Calculate the mean density of every species for every subzone (= Xi).
+  
+  #see QHACS3
+  
+  
+  ###QHACS Step4 ### Calculate the ratio Xi/X for every species in each subzone.
+  
+  QHACS5<-merge(QHACS3, QHACS4, by="ScientificName")
+  QHACS5$XioverX<-QHACS5$AvgDensPol.x/QHACS5$AvgDensTot #Xi/X
+  
+  
+  ###QHACS Step5 ### Determine the 5 % subzones with the highest ratio.Calculate the percentage of the density of every species that occurs in the 5 % most important subzones.
+  
+  QHACS6<-xtabs(XioverX~grid_id+ScientificName, data=QHACS5)
+  SumTop5<-function(t) sum(sort(t,decreasing=TRUE)[1:top5Perc])
+  QHACS6a<-apply(QHACS6, 2, SumTop5)
+  QHACS6b<-apply(QHACS6, 2, sum)
+  QHACS7<-as.data.frame(cbind(QHACS4a,QHACS6a/QHACS6b))
+  names(QHACS7)[2:3]<-c("Z", "Y")
+  
+  
+  ###QHACS Step6 ### Determine in how many subzones every species occurs (= Z).
+  
+  # see QHACS4a
+  
+  
+  ###QHACS Step7 ### Calculate the ratio Y/Z which is the aggregation coefficient for each species. 
+  
+  QHACS7$YoverZ<-QHACS7$Y/QHACS7$Z #(Y/Z)
+  QHACS8<-merge(QHACS5, QHACS7, by="ScientificName")
+  
+  
+  ###QHACS Step8 ### Multiply the ratio Y/Z with the ratio Xi/X and divide these values in 5 classes with values between 1 and 5 (with an equal amount of subzones in each class).
+  
+  QHACS8$XioverXYoverZ<-QHACS8$XioverX*QHACS8$YoverZ   #Xi*Y/Z  
+  QHACS9<-aggregate(XioverXYoverZ ~ grid_id, data=QHACS8, sum)  
+  
+  
+  # Classification into five categories
+  QHACS<-QClassify(QHACS9, QHACS9$XioverXYoverZ, "QHACSCLASS")   
+  
+  QHACS<-merge(PolIDs, QHACS, by="grid_id", all.x=TRUE)  
+  QHACS<-QHACS[c("grid_id","QHACSCLASS")]  
+  
+  # Produce map of the results
+  produce_map_sf(QHACS,"QHACSCLASS","AQ9", continous)
 } else {
   if(!exists("QHACS")) {
   QHACS<-PolIDs  
@@ -1237,7 +1264,7 @@ produce_map_sf(QHACS,"QHACSCLASS","AQ9", continous)
 
 ```
 
-### 7.111 AQ 10: Is the presence of ecologically significant features high in the subzone?
+### 7.11 AQ 10: Is the presence of ecologically significant features high in the subzone?
 
 ```{r AQ10}
 if(length(ESS) > 0){
@@ -1252,7 +1279,7 @@ if(length(ESS) > 0){
   }
   
   qual_QESS1 <- data.frame()
-  ## Loop through the whole data grid to check for the presence of the ES species
+  # Loop through the whole data grid to check for the presence of the ES species
   # A value 5 is given if the ES species is detected in the grid, if not, the value 0 is given
   for (i in 1:NpolID) {
     grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
@@ -1353,7 +1380,7 @@ if(length(HFKS) > 0){
   }
   
   qual_QHFKS1 <- data.frame()
-  ## Loop through the whole date grid to check for the presence of HFK species
+  # Loop through the whole date grid to check for the presence of HFK species
   # A value 5 is given if the HFK species is detected in the grid, if not, the value 0 is given
   for (i in 1:NpolID) {
     grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
@@ -1455,7 +1482,7 @@ if(length(MSS) > 0){
   }
   
   qual_QMSS1 <- data.frame()
-  ## Loop through the whole data grid to check for the presence of HFK species
+  # Loop through the whole data grid to check for the presence of HFK species
   # A value 5 is given if the HFK species is detected in the grid, if not, the value 0 is given
   for (i in 1:NpolID) {
     grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
@@ -1542,7 +1569,7 @@ if(length(MSS) > 0){
 }
 ```
 
-## 8. Calculate the final score and add the calculated data to the grid
+### 8. Final data frame with all AQ values
 
 The final dataframe consists out of the following two
 columns:
@@ -1565,10 +1592,7 @@ columns:
 | **AQ14**            | qual_QMSS\$qual_QMSSCLASS   |
 | **AQ15**            | QMSS\$QMSSCLASS             |
 
-Now, we can calculate the final score based on the results
-obtained for each AQ.
-
-```{r finalresult}
+```{r final_df}
 # Final dataframe with all the results 
 EcoCompQ_base <- data.frame(QPRS$QPRSCLASS,
                        QHARS$QHARSCLASS,
@@ -1588,6 +1612,181 @@ EcoCompQ_base <- data.frame(QPRS$QPRSCLASS,
 
 names(EcoCompQ_base) <- c("AQ1","AQ2", "AQ3","AQ4","AQ5","AQ6", "AQ7", "AQ8","AQ9", "AQ10", "AQ11","AQ12","AQ13", "AQ14","AQ15")
 
+
+```
+
+
+### 9. Confidence assessment 
+
+This score is calculated based on the equation present in the guideline. It needs 3 parameters: AQi, N and wi. 
+
+**AQi**: identifies the ith Assessment Question, which in the equation is assigned a value of 1 if it
+has been answered or 0 if not answered. 
+
+**N**: total number of questions defined for each EC (e.g., N=15 for macrobenthos, N=13 for marine benthic habitats)
+
+**wi**: weight assigned to AQ, the value is between 1 and 5 and depends on the type of data (modelling/monitoring data or expert judgment) and the data availability.
+
+
+```{r conf_assessment}
+
+# Get N 
+if(component_habitat == TRUE){
+  N <- 13
+} else {
+  N <- 15
+}
+
+# Get AQi for each subzones
+AQi_results <-EcoCompQ_base %>%
+   mutate(across(.cols = everything(), ~ ifelse(is.na(.x), 0, 1)))
+
+# Get wi for each subzones 
+# Count number of samples for monitoring data
+DAV <- assessment_data %>%
+  group_by(grid_id) %>%
+  summarise(nb_sample = length(unique(FieldNumber))) %>%
+  st_drop_geometry()
+if(modelling_data == TRUE){
+  DAV <- assessment_data %>%
+    group_by(grid_id) %>%
+    summarise(area_covered = sum(Density, na.rm = TRUE)) %>% 
+    st_drop_geometry()
+}
+
+
+# If the number of subzones covered by the data is less than the number of subzones present in the bbt, than the minimum of the range will always be 0
+if (monitoring_data == TRUE){
+  if(NpolID < length(GRID_degree_4326$grid_id)){
+    range_data <- max(DAV$nb_sample) - 0 
+    min_data <- 0
+  } else if(NpolID == length(GRID_degree_4326$grid_id)){
+    range_data <- max(DAV$nb_sample) - min(DAV$nb_sample)
+    min_data <- min(DAV$nb_sample)
+  }
+  
+  X_data <- range_data/5
+  max_data <- max(DAV$nb_sample)}
+
+
+# change nb_sample into categories (low, Medium-Low, Medium, Medium-High, High), depending on the data used 
+if (expert_judgement == TRUE){
+  DAV2 <- DAV
+}else if(modelling_data == TRUE){
+  DAV2 <- DAV %>%
+    mutate(categories_dav = ifelse(area_covered >= 0 & area_covered <= 0.2, "Low",
+                        ifelse(area_covered > 0.2 & area_covered <= 0.4, "Medium-Low",
+                               ifelse(area_covered > 0.4 & area_covered <= 0.6, "Medium",
+                                      ifelse(area_covered > 0.6 & area_covered <= 0.8, "Medium-High",
+                                             ifelse(area_covered > 0.8 & area_covered <= 1, "High", NA)))))) %>%
+  select(grid_id,categories_dav)
+} else if(monitoring_data == TRUE){
+  DAV2 <- DAV %>%
+    mutate(categories_dav = ifelse(nb_sample >= min_data & nb_sample <= (min_data+X_data), "Low",
+                        ifelse(nb_sample > (min_data+X_data) & nb_sample <= (min_data+(2*X_data)), "Medium-Low",
+                               ifelse(nb_sample > (min_data+(2*X_data)) & nb_sample <= (min_data+(3*X_data)), "Medium",
+                                      ifelse(nb_sample > (min_data+(3*X_data)) & nb_sample <= (min_data+(4*X_data)), "Medium-High",
+                                             ifelse(nb_sample > (min_data+(4*X_data)) & nb_sample <= max_data, "High", NA)))))) %>%
+  select(grid_id,categories_dav)
+}
+
+# Mutate those categories into wi, based on the type of data used
+
+if (expert_judgement == TRUE){
+  wi_results <- DAV2 %>%
+    mutate(wi = 1) %>%
+    select(grid_id,wi)
+}else if(modelling_data == TRUE){
+  wi_results <- DAV2 %>%
+    mutate(wi = ifelse(categories_dav == "Low", 1,
+                        ifelse(categories_dav == "Medium-Low", 1,
+                               ifelse(categories_dav == "Medium", 2,
+                                      ifelse(categories_dav == "Medium-High", 3,
+                                             ifelse(categories_dav == "High", 3, NA)))))) %>%
+    select(grid_id,wi)
+} else if(monitoring_data == TRUE){
+  wi_results <- DAV2 %>%
+    mutate(wi = ifelse(categories_dav == "Low", 1,
+                        ifelse(categories_dav == "Medium-Low", 2,
+                               ifelse(categories_dav == "Medium", 3,
+                                      ifelse(categories_dav == "Medium-High", 4,
+                                             ifelse(categories_dav == "High", 5, NA)))))) %>%
+    select(grid_id,wi)
+}
+
+EcoComp_DAV1 <- data.frame(cbind(wi_results, AQi_results))
+
+# Calculate confidence scores 
+EcoComp_DAV2 <- EcoComp_DAV1 %>% 
+  mutate(across(starts_with("AQ"), ~ .x*wi))
+
+EcoComp_DAV2$conf_score <- rowSums(EcoComp_DAV2[ ,3:length(colnames(EcoComp_DAV2))], na.rm=TRUE)/N
+
+
+```
+
+**Plot results obtained for the confidence score**
+
+``` {r plot_conf_score}
+
+EcoComp_DAV_map <- GRID_degree_4326 %>% 
+  left_join(EcoComp_DAV2)
+
+if (continous == TRUE){
+  print(ggplot()+
+   geom_sf(data = EcoComp_DAV_map$geometry,lwd = 0) +
+   geom_sf(data = EcoComp_DAV_map, aes(fill=conf_score), colour = "grey90", lwd = 0) + 
+   scale_fill_viridis_c(name = "Confidence Score", na.value = "grey94", limits = c(0,5)) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0)))
+ggsave(filename=file.path(Output, paste0(OutputFileName,"_confidence_score.png")),
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+} else{
+  # Define the categories and colors
+  categories <- c("0 - 1", "1 - 2", "2 - 3", "3 - 4", "4 - 5")
+  mycolors <- viridisLite::viridis(5) 
+  # Create categories with explicit levels
+  EcoComp_DAV_map$category_graph <- cut(
+      EcoComp_DAV_map$conf_score,
+      breaks = c(0, 1, 2, 3, 4, 5),
+      include.lowest = TRUE,
+      labels = categories,
+      # Force creation of all levels
+      right = FALSE,
+      # Ensure that all levels are present
+      levels = categories
+  )
+  print(ggplot()+
+   geom_sf(data = EcoComp_DAV_map$geometry,lwd = 0) +
+   geom_blank() +
+   geom_sf(data = EcoComp_DAV_map, aes(fill=category_graph), colour = "grey90", lwd = 0, 
+           show.legend = TRUE) + 
+     # show legend allow to have colors in legend even for categories without data points
+   scale_fill_manual(values = mycolors, name = "Confidence Score", limits = categories, 
+                     na.value = "grey94", labels = categories, drop = FALSE) +
+   geom_sf(data = world_data$geometry) +
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
+         axis.text.x=element_text(angle=300,hjust=0))
+   )
+ggsave(filename=file.path(Output, paste0(OutputFileName,"_confidence_score.png")),
+    width = NA,
+    height = NA,
+    units = "cm",
+    dpi=1600)
+}
+
+```
+
+## 10. Calculate the final score and add the calculated data to the grid
+
+```{r total_score}
+
 # Remove the column of questions where only NA are present
 EcoCompQ <- EcoCompQ_base %>%
   select(where(function(x) any(!is.na(x))))
@@ -1597,15 +1796,23 @@ LenQ<-apply(EcoCompQ, 1, function (t) length(t)-length(t[t[]=="NA"]))
 SumQ<-apply(EcoCompQ, 1, sum, na.rm=TRUE )
 EcoCompQ$SumQ<-SumQ
 EcoCompQ$LenQ<-LenQ
+if(modelling_data == TRUE){
+  DAV$nb_sample <- 0
+}
+
+EcoCompQ$nb_sample <- DAV$nb_sample
 
 
 EcoCompQ$Total <- SumQ/LenQ
 # Add grid ID to the dataframe
-EcoCompQ<-data.frame(cbind(PolIDs, EcoCompQ))
+EcoCompQ<-data.frame(cbind(PolIDs, EcoCompQ, EcoComp_DAV2$conf_score))
 
 # Combine the final score with the grid geometry.
 result.new <- GRID_degree_4326 %>% 
   left_join(EcoCompQ)
+
+names(result.new)[names(result.new) == 'EcoComp_DAV2.conf_score'] <- 'conf_score'
+
 
 Result_final <- result.new
 
@@ -1614,10 +1821,7 @@ st_write(Result_final, file.path(Output, paste0(OutputFileName,"_layers.shp")), 
 
 ```
 
-## 9. Plot the components results on a map
-
-**Plot total score**
-## Map for AQ and total score
+**Map of the total score**
 
 
 ```{r plottot, message=FALSE, warning=FALSE, results='hide'}
@@ -1628,7 +1832,8 @@ if (continous == TRUE){
    geom_sf(data = Result_final, aes(fill=Result_final$Total), colour = "grey90", lwd = 0) + 
    scale_fill_viridis_c(name = "Total", na.value = "grey94", limits = c(0,5)) +
    geom_sf(data = world_data$geometry) +
-   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
          axis.text.x=element_text(angle=300,hjust=0)))
 ggsave(filename=file.path(Output, paste0(OutputFileName,"_totalscore.png")),
     width = NA,
@@ -1653,11 +1858,14 @@ ggsave(filename=file.path(Output, paste0(OutputFileName,"_totalscore.png")),
   print(ggplot()+
    geom_sf(data = Result_final$geometry,lwd = 0) +
    geom_blank() +
-   geom_sf(data = Result_final, aes(fill=category_graph), colour = "grey90", lwd = 0, show.legend = TRUE) + # show.legend allow to have colors in legend even for categories without data points
-   scale_fill_manual(values = mycolors, name = "Total", limits = categories, na.value = "grey94", 
-                     labels = categories, drop = FALSE) +
+   geom_sf(data = Result_final, aes(fill=category_graph), colour = "grey90", 
+           lwd = 0, show.legend = TRUE) + 
+   # show.legend allow to have colors in legend even for categories without data points
+   scale_fill_manual(values = mycolors, name = "Total", limits = categories, 
+                     na.value = "grey94", labels = categories, drop = FALSE) +
    geom_sf(data = world_data$geometry) +
-   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+         panel.background = element_blank(),
          axis.text.x=element_text(angle=300,hjust=0))
    )
 ggsave(filename=file.path(Output, paste0(OutputFileName,"_totalscore.png")),
