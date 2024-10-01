@@ -4,11 +4,7 @@
 ### EVA_phase1_preprocessing_EUSeaMap
 This is an example of EVA phase 1 as defined in the Marbefes guidelines. It contains a Python module to convert the EUSeaMap to hexagons or hexagon centers. This is required to match the BBT grid which consists of hexagons. 
 
-### EVA_phase2_assessment
-This is EVA tool for phase 2 as defined in the Marbefes guidelines. It contains an RMarkdown script etc.
-- the EC eva script
-- the total EVA script (merging EC's)
-
-
-### EVA_phase3_[...]
-This is EVA tool for phase 3 as defined in the Marbefes guidelines. It contains an RMarkdown script etc.
+### EVA_phase2-3_assessment
+This is EVA tool for phase 2 and phase 3 as defined in the Marbefes guidelines. It contains RMarkdown scripts to:
+- determine the ecological value and the confidence score for an ecological componenent (EC) 
+- merge all EC together in a final ecological valuation
