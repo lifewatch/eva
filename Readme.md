@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/794890222.svg)](https://doi.org/10.5281/zenodo.13934886)
+
 # Ecological Value Assessment (EVA)
 
 ## Contents
