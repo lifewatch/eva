@@ -10,3 +10,11 @@ This is an example of EVA phase 1 as defined in the Marbefes guidelines. It cont
 This is EVA tool for phase 2 and phase 3 as defined in the Marbefes guidelines. It contains RMarkdown scripts to:
 - determine the ecological value and the confidence score for an ecological componenent (EC) 
 - merge all EC together in a final ecological valuation
+
+### EVA_demo
+A simplified run through the script with demo data. 
+
+## Maintenance
+- dev: for development, can merge to test if new feature is ready.
+- test: for sharing and discussing with partners, can merge to main if all agree. 
+- main: stable versions only!

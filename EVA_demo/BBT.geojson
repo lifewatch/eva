@@ -1,0 +1,39 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "Name": "BBT",
+        "Description": "Outer boundary of the grid"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.5,
+              -9.5
+            ],
+            [
+              6.5,
+              -9.5
+            ],
+            [
+              6.5,
+              0.5
+            ],
+            [
+              -0.5,
+              0.5
+            ],
+            [
+              -0.5,
+              -9.5
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
