@@ -52,7 +52,13 @@ my_packages <- c( "data.table","sf", "raster",
 already installed*
 
 ```{r install_package}
-install.packages(my_packages)
+# Identify packages that are not yet installed
+packages_to_install <- my_packages[!(my_packages %in% installed.packages()[, "Package"])]
+
+# Install only missing packages
+if(length(packages_to_install)) {
+  install.packages(packages_to_install)
+}
 ```
 
 *Load packages*
@@ -112,8 +118,8 @@ FALSE for any other ecological component.
 
 ```{r setting1}
 ### Path settings for input and output data
-InputFile<-"test_data_habitat.csv"
-Output<-"~/output/"
+InputFile<-"../data/test_data_habitat.csv"
+Output<-"../output/"
 OutputFileName<-"EVA_EC_habitat"
 
 ### Test if output path exists, if not create it 
@@ -121,9 +127,9 @@ if (!dir.exists(Output)) {
   dir.create(Output, recursive = TRUE)
 }
 
-BBT_coordinates = "BBT.geojson"
+BBT_coordinates = "../data/BBT.geojson"
 BBT_layer <- ""
-SubzoneShapeName = "grid.geojson"
+SubzoneShapeName = "../data/grid.geojson"
 
 #Max/min latitude and longitude
 xmin <- -15
@@ -187,6 +193,7 @@ please leave *MSS \<- c("")* as it is and run the code with
 the vector empty.
 
 ```{r mss}
+# REMEMBER HABITAT DOESNT APPLY SYMBIOTICs
 ### Enter your own list here:
 MSS <- c("")
 ```
@@ -607,20 +614,48 @@ QClassify <- function(x, y, z) {
 #### 7.1.1 Rare and common species list per subzone.
 
 ```{r raresp}
-# Creating a list of unique grid_id -  combinations
-RareSpecList1<-aggregate(ID~ grid_id+ScientificName, data = assessment_data, length) 
+# -------------------------------------------------------------------------
+# ORIGINAL CODE (commented out for mockup version)
+# -------------------------------------------------------------------------
 
-# Counting the number of grid_ids where each species occurs
-RareSpecList2<-aggregate(grid_id~ScientificName,data=RareSpecList1, length) 
+# # Filter out absences (Density = 0)
+# present_data <- subset(assessment_data, Density > 0)
+#
+# # Aggregate by grid and species to see where species actually occur
+# RareSpecList1 <- aggregate(ID ~ grid_id + ScientificName, data = present_data, length)
+#
+# # Count how many grid cells each species occurs in
+# RareSpecList2 <- aggregate(grid_id ~ ScientificName, data = RareSpecList1, length)
+#
+# # Calculate number of unique grid cells in total
+# NpolID <- length(unique(assessment_data$grid_id))
+#
+# # Species that occur in <= 5% of the grid cells
+# RareSpecList <- subset(RareSpecList2, grid_id <= (NpolID * 5 / 100))
+#
+# # Species that occur in > 5% of the grid cells
+# CommonSpecList <- subset(RareSpecList2, grid_id > (NpolID * 5 / 100))
 
-# Listing those species that occur in less then 5% of the gridcells
-RareSpecList<-RareSpecList2[which(RareSpecList2$grid_id<=(NpolID*5/100)),] 
+# -------------------------------------------------------------------------
+# MOCKUP VERSION (hardcoded lists)
+# -------------------------------------------------------------------------
 
-# Listing those species that occur in more then 5% of the gridcells
-CommonSpecList<-RareSpecList2[which(RareSpecList2$grid_id>(NpolID*5/100)),] 
+# Hardcoded empty rare species list (no species are considered rare)
+RareSpecList <- data.frame(
+  ScientificName = character(),  # species names
+  grid_id = numeric()            # number of grid cells (count)
+)
+
+# Hardcoded common species list (all species considered common in mockup)
+CommonSpecList <- data.frame(
+  ScientificName = c("Habitat1", "Habitat2", "Habitat3", "Habitat4", "Habitat5", "Habitat6", "Habitat7", "Habitat8"),  # example species
+  grid_id = c(64, 64, 64, 64, 64, 64,64, 64)                                   # example grid cell counts
+)
 
 # Dataframe required for AQ9 
-EcoCompCommon_quant <- Quantitative_data[Quantitative_data$ScientificName %in% CommonSpecList$ScientificName,]
+EcoCompCommon_quant <- Quantitative_data[
+  Quantitative_data$ScientificName %in% CommonSpecList$ScientificName, 
+]
 
 ```
 
@@ -663,6 +698,68 @@ write.csv(Rarespec_loc_quantitative_count, file = file.path(Output, paste0(Outpu
 
 ```
 
+**Distribution map of your common species**
+
+```{r}
+# Filter the assessment data for common species
+CommonSpec_loc <- assessment_data[assessment_data$ScientificName %in% CommonSpecList$ScientificName, ]
+
+# Write common species locations to a shapefile
+st_write(CommonSpec_loc, file.path(Output, "common_species_distribution.shp"), append = FALSE)
+
+# Produce a map for common species presence
+produce_map(CommonSpec_loc, "common_sp", "Common species data available")
+
+# Filter the quantitative data for common species
+CommonSpec_loc_quantitative <- Quantitative_data[Quantitative_data$ScientificName %in% CommonSpecList$ScientificName, ]
+
+# Write quantitative common species data to a shapefile
+st_write(CommonSpec_loc_quantitative, file.path(Output, "common_species_abundance_distribution.shp"), append = FALSE)
+
+# Produce a map for common species abundance
+produce_map(CommonSpec_loc_quantitative, "common_sp_abundance", "Common species abundance data available")
+
+```
+
+**Write species list and count number of
+occurrence/abundance data available**
+
+```{r}
+# Summarise occurrence data for common species
+CommonSpec_loc_count <- CommonSpec_loc %>%
+  group_by(ScientificName) %>% 
+  summarise(occurence_data_present = n(), .groups = "drop") %>%
+  st_drop_geometry()
+
+# Summarise abundance/quantitative data for common species
+CommonSpec_loc_quantitative_count <- CommonSpec_loc_quantitative %>%
+  group_by(ScientificName) %>% 
+  summarise(abundance_data_present = n(), .groups = "drop") %>%
+  st_drop_geometry()
+
+# Print nicely in R Markdown
+print(
+  kbl(
+    list(CommonSpec_loc_count, CommonSpec_loc_quantitative_count)
+  ) %>% 
+    kable_classic(full_width = F, html_font = "Cambria")
+)
+
+# Write CSV files for common species
+write.csv(
+  CommonSpec_loc_count,
+  file = file.path(Output, paste0(OutputFileName, "_common_sp_count.csv")),
+  row.names = FALSE
+)
+
+write.csv(
+  CommonSpec_loc_quantitative_count,
+  file = file.path(Output, paste0(OutputFileName, "_common_sp_abundance_count.csv")),
+  row.names = FALSE
+)
+
+```
+
 #### 7.1.2 Rare species list on Regional Scale
 
 This part needs extra steps:
@@ -672,39 +769,61 @@ This part needs extra steps:
 -   Map the data using the new grid
 
 ```{r regsp}
-# Create the regional grid 
-GRD_region <- st_make_grid(Polygon_coordinated_4326$geom, cellsize = 50000, square = TRUE)
-  
-# Create a dataframe with the grid_polygon and grid_id for each subzone
-grid_polygons_sf_region <- st_sf(grid_id = seq_along(GRD_region[Polygon_coordinated_4326$geom]), 
-                          geometry = GRD_region[Polygon_coordinated_4326$geom], crs = 4326)
-# Get Spatialpoint from dataset
-# Done in point 6: EcoComp1.2coord
 
-# Reproject the grid using degrees as unit
-GRID_region_degree_4326 <- st_transform(grid_polygons_sf_region,crs="EPSG:4326")
+# -------------------------------------------------------------------------
+# ORIGINAL CODE (commented out for mockup version)
+# -------------------------------------------------------------------------
 
-# Joining the spatial points and the grid polygons
-combine_data_grid_region <-st_join(EcoComp1.2coord,GRID_region_degree_4326)
-  
-# Add the PolIDs to the original dataframe 
-EcoComp_regiona <- combine_data_grid_region %>% 
-  dplyr::select(ID,grid_id) %>%
-  inner_join(EcoComp1.2, by = "ID")
-# Select the data that is associated with a grid_id
-EcoComp_region <- EcoComp_regiona[!is.na(EcoComp_regiona$grid_id),]
-# Create unique location numbers
-EcoComp_region$LocationNumber<-(round(EcoComp_region$Latitude, digits=4))/100+10000*
-  (round(EcoComp_region$Longitude, digits=4))
+# # Create the regional grid 
+# GRD_region <- st_make_grid(Polygon_coordinated_4326$geom, cellsize = 50000, square = TRUE)
+#   
+# # Create a dataframe with the grid_polygon and grid_id for each subzone
+# grid_polygons_sf_region <- st_sf(
+#   grid_id = seq_along(GRD_region[Polygon_coordinated_4326$geom]), 
+#   geometry = GRD_region[Polygon_coordinated_4326$geom], 
+#   crs = 4326
+# )
+#
+# # Get Spatialpoint from dataset
+# # Done in point 6: EcoComp1.2coord
+#
+# # Reproject the grid using degrees as unit
+# GRID_region_degree_4326 <- st_transform(grid_polygons_sf_region, crs = "EPSG:4326")
+#
+# # Joining the spatial points and the grid polygons
+# combine_data_grid_region <- st_join(EcoComp1.2coord, GRID_region_degree_4326)
+#   
+# # Add the PolIDs to the original dataframe 
+# EcoComp_regiona <- combine_data_grid_region %>% 
+#   dplyr::select(ID, grid_id) %>%
+#   inner_join(EcoComp1.2, by = "ID")
+#
+# # Select the data that is associated with a grid_id
+# EcoComp_region <- EcoComp_regiona[!is.na(EcoComp_regiona$grid_id),]
+#
+# # Create unique location numbers
+# EcoComp_region$LocationNumber <- (round(EcoComp_region$Latitude, digits = 4)) / 100 + 
+#   10000 * (round(EcoComp_region$Longitude, digits = 4))
+#
+# # Creating a list of unique grid_id - ScientificName combinations
+# RareSpecList1_region <- aggregate(ID ~ grid_id + ScientificName, data = EcoComp_region, length)
+#
+# # Counting the number of grid_ids where each species occurs
+# RareSpecList2_region <- aggregate(grid_id ~ ScientificName, data = RareSpecList1_region, length)
+#
+# # Listing those species that occur in less than 2% of the gridcells
+# RareSpecList_region <- RareSpecList2_region[
+#   which(RareSpecList2_region$grid_id <= (NpolID * 2 / 100)), ]
 
-# Creating a list of unique grid_id - ScientificName combinations
-RareSpecList1_region<-aggregate(ID~ grid_id+ScientificName, data = EcoComp_region, length) 
+# -------------------------------------------------------------------------
+# MOCKUP VERSION (hardcoded empty list)
+# -------------------------------------------------------------------------
 
-# Counting the number of grid_ids where each species occurs
-RareSpecList2_region<-aggregate(grid_id~ScientificName,data=RareSpecList1_region, length) 
+RareSpecList_region <- data.frame(
+  ScientificName = character(),  # species names
+  grid_id = numeric()            # number of grid cells (count)
+)
 
-# Listing those species that occur in less then 2% of the gridcells
-RareSpecList_region<-RareSpecList2_region[which(RareSpecList2_region$grid_id<=(NpolID*2/100)),] 
 
 ```
 
@@ -756,39 +875,59 @@ This part need extra steps:
 -   Map the data using the new grid
 
 ```{r natsp}
-# Create a regional grid 
-GRD_nation <- st_make_grid(Polygon_coordinated_4326$geom, cellsize = 10000, square = TRUE)
-  
-# Create a dataframe with grid_polygons and grid_ids for each subzone
-grid_polygons_sf_nation <- st_sf(grid_id = seq_along(GRD_nation[Polygon_coordinated_4326$geom]), 
-                          geometry = GRD_nation[Polygon_coordinated_4326$geom], crs = 4326)
-# Get Spatialpoint from dataset
-# Done in point 6: EcoComp1.2coord
+# -------------------------------------------------------------------------
+# ORIGINAL CODE (commented out for mockup version)
+# -------------------------------------------------------------------------
 
-# Reproject the grid using degrees as unit
-GRID_nation_degree_4326 <- st_transform(grid_polygons_sf_nation,crs="EPSG:4326")
+# # Create a regional grid 
+# GRD_nation <- st_make_grid(Polygon_coordinated_4326$geom, cellsize = 10000, square = TRUE)
+#   
+# # Create a dataframe with grid_polygons and grid_ids for each subzone
+# grid_polygons_sf_nation <- st_sf(
+#   grid_id = seq_along(GRD_nation[Polygon_coordinated_4326$geom]), 
+#   geometry = GRD_nation[Polygon_coordinated_4326$geom], 
+#   crs = 4326
+# )
+#
+# # Get Spatialpoint from dataset
+# # Done in point 6: EcoComp1.2coord
+#
+# # Reproject the grid using degrees as unit
+# GRID_nation_degree_4326 <- st_transform(grid_polygons_sf_nation, crs = "EPSG:4326")
+#
+# # Join the spatial points and the grid polygons
+# combine_data_grid_nation <- st_join(EcoComp1.2coord, GRID_nation_degree_4326)
+#   
+# # Adding PolIDs to the original dataframe 
+# EcoComp_nationa <- combine_data_grid_nation %>% 
+#   dplyr::select(ID, grid_id) %>%
+#   inner_join(EcoComp1.2, by = "ID")
+#
+# # Select the data that is associated with a grid_id
+# EcoComp_nation <- EcoComp_nationa[!is.na(EcoComp_nationa$grid_id),]
+#
+# # Create unique location numbers
+# EcoComp_nation$LocationNumber <- (round(EcoComp_nation$Latitude, digits = 4)) / 100 + 
+#   10000 * (round(EcoComp_nation$Longitude, digits = 4))
+#
+# # Creating a list of unique grid_id - ScientificName combinations
+# RareSpecList1_nation <- aggregate(ID ~ grid_id + ScientificName, data = EcoComp_nation, length)
+#
+# # Counting the number of grid_ids where each species occurs
+# RareSpecList2_nation <- aggregate(grid_id ~ ScientificName, data = RareSpecList1_nation, length)
+#
+# # Listing those species that occur in less than 0.5% of the gridcells
+# RareSpecList_nation <- RareSpecList2_nation[
+#   which(RareSpecList2_nation$grid_id <= (NpolID * 0.5 / 100)), ]
 
-# Join the spatial points and the grid polygons
-combine_data_grid_nation <-st_join(EcoComp1.2coord,GRID_nation_degree_4326)
-  
-# Adding PolIDs to the original dataframe 
-EcoComp_nationa <- combine_data_grid_nation %>% 
-  dplyr::select(ID,grid_id) %>%
-  inner_join(EcoComp1.2, by = "ID")
-# Select the data that is associated with a grid_id
-EcoComp_nation <- EcoComp_nationa[!is.na(EcoComp_nationa$grid_id),]
-# Create unique location numbers
-EcoComp_nation$LocationNumber<-(round(EcoComp_nation$Latitude, digits=4))/100+10000*
-  (round(EcoComp_nation$Longitude, digits=4))
+# -------------------------------------------------------------------------
+# MOCKUP VERSION (hardcoded empty list for nationally rare species)
+# -------------------------------------------------------------------------
 
-# Creating a list of unique grid_id - ScientificName combinations
-RareSpecList1_nation<-aggregate(ID~ grid_id+ScientificName, data = EcoComp_nation, length) 
-
-# Counting the number of grid_ids where each species occurs
-RareSpecList2_nation<-aggregate(grid_id~ScientificName,data=RareSpecList1_nation, length) 
-
-# Listing those species that occur in less then 0.5% of the gridcells
-RareSpecList_nation<-RareSpecList2_nation[which(RareSpecList2_nation$grid_id<=(NpolID*0.5/100)),] 
+RareSpecList_nation <- data.frame(
+  ScientificName = character(),  # species names
+  grid_id = numeric()            # number of grid cells (count)
+)
 
 ```
 
@@ -1842,9 +1981,9 @@ if(modelling_data == TRUE){
 }
 
 EcoCompQ$nb_sample <- DAV$nb_sample
-
-
 EcoCompQ$Total <- SumQ/LenQ
+
+
 # Add grid ID to the dataframe
 EcoCompQ<-data.frame(cbind(PolIDs, EcoCompQ, EcoComp_DAV2$conf_score))
 
