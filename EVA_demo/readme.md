@@ -32,9 +32,8 @@
 |RRF: regional rare features 		|Rarespec_reg   			| based on spatial rarity | hard coded list |
 |NRF: national rare features 		|RareSpecList_nation   			| based on spatial rarity | hard coded list |
 
-#### EVA: AQ changes
-
-...
+#### EVA: AQ Changes
+- AQ7: Records with density 0 where considered as an observation in the old code, contributing to the count of features in the subzone (score 5 instead of 0). In the new code, species observation with density 0 will be singed 0 score.
 
 #### EVA: total score changes
 

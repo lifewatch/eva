@@ -1256,40 +1256,46 @@ if(!length(RareSpecList_nation$ScientificName) == 0){
 
 ```{r AQ7}
 QNFH1 <- data.frame()
-features_present <- unique(assessment_data$ScientificName)
-# Loop through all the grid with data, to check for the presence of rare species
-# THe value 5 is given if the rare species is detected in the grid, if not, the value 0 is given
+features_present <- unique(as.character(assessment_data$ScientificName))  # ensure character
+
+# Loop through all the grids
 for (i in 1:NpolID) {
-  grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
+  grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i], ]
   grid_vector <- PolIDs$grid_id[i]
-  for(j in features_present){
-    if (j %in% grid_evaluated$ScientificName){
+  
+  for (j in features_present) {
+    # Check if species exists AND has density > 0
+    present <- any(grid_evaluated$ScientificName == j & grid_evaluated$Density > 0, na.rm = TRUE)
+    
+    # Use isTRUE to safely handle NA
+    if (isTRUE(present)) {
       grid_vector <- append(grid_vector, 5)
-    } else{
+    } else {
       grid_vector <- append(grid_vector, 0)
     }
   }
-  QNFH1 <- rbind(QNFH1,grid_vector)
+  
+  QNFH1 <- rbind(QNFH1, grid_vector)
 }
 
 # Calculation of the average value for each subzone
-QNFH2 <-  QNFH1 %>%
-  mutate(average_value = rowMeans(.[-1])) %>%
+QNFH2 <- QNFH1 %>%
+  mutate(average_value = rowMeans(.[-1], na.rm = TRUE)) %>%  # include na.rm to avoid issues with NA
   rename(grid_id = 1) %>% 
-  select(grid_id,average_value)
-
+  select(grid_id, average_value)
 
 # Classification into five categories
-QNFH3<-QClassify(QNFH2, QNFH2$average_value, "QNFHCLASS")
-
-QNFH<-QNFH3[c("grid_id","QNFHCLASS")]
+QNFH3 <- QClassify(QNFH2, QNFH2$average_value, "QNFHCLASS")
+QNFH <- QNFH3[c("grid_id","QNFHCLASS")]
 
 # Produce map of the results
-produce_map_sf(QNFH,"QNFHCLASS","AQ7", continous)
+produce_map_sf(QNFH, "QNFHCLASS", "AQ7", continous)
 
-if(!exists("QNFH")) {
-  QNFH<-PolIDs
-  QNFH$QNFHCLASS<-NA}
+# If QNFH does not exist, create empty with NAs
+if (!exists("QNFH")) {
+  QNFH <- PolIDs
+  QNFH$QNFHCLASS <- NA
+}
 ```
 
 ### 7.9 AQ8: Is the subzone characterised by high counts of many species?
@@ -1967,38 +1973,42 @@ ggsave(filename=file.path(Output, paste0(OutputFileName,"_confidence_score.png")
 
 ```{r total_score}
 
-# Remove the column of questions where only NA are present
+# Remove columns that are entirely NA
 EcoCompQ <- EcoCompQ_base %>%
   select(where(function(x) any(!is.na(x))))
 
+# Calculate row-wise metrics
+LenQ <- apply(EcoCompQ, 1, function(t) sum(!is.na(t)))     # count of non-NA values
+SumQ <- apply(EcoCompQ, 1, sum, na.rm = TRUE)              # sum of non-NA values
+MaxQ <- apply(EcoCompQ, 1, max, na.rm = TRUE)              # NEW: maximum of non-NA values
 
-LenQ<-apply(EcoCompQ, 1, function (t) length(t)-length(t[t[]=="NA"]))
-SumQ<-apply(EcoCompQ, 1, sum, na.rm=TRUE )
-EcoCompQ$SumQ<-SumQ
-EcoCompQ$LenQ<-LenQ
-if(modelling_data == TRUE){
+# Add computed columns
+EcoCompQ$SumQ <- SumQ
+EcoCompQ$LenQ <- LenQ
+EcoCompQ$Total <- MaxQ                                     # Use max instead of mean
+
+# Reset nb_sample when modelling_data = TRUE
+if (modelling_data == TRUE) {
   DAV$nb_sample <- 0
 }
 
 EcoCompQ$nb_sample <- DAV$nb_sample
-EcoCompQ$Total <- SumQ/LenQ
 
+# Add grid ID and confidence score
+EcoCompQ <- data.frame(cbind(PolIDs, EcoCompQ, EcoComp_DAV2$conf_score))
 
-# Add grid ID to the dataframe
-EcoCompQ<-data.frame(cbind(PolIDs, EcoCompQ, EcoComp_DAV2$conf_score))
-
-# Combine the final score with the grid geometry.
+# Combine with grid geometry
 result.new <- GRID_degree_4326 %>% 
   left_join(EcoCompQ)
 
+# Rename column for clarity
 names(result.new)[names(result.new) == 'EcoComp_DAV2.conf_score'] <- 'conf_score'
 
-
+# Final output
 Result_final <- result.new
 
-# Export the results to a shapefile
-st_write(Result_final, file.path(Output, paste0(OutputFileName,"_layers.shp")), append = FALSE)
-
+# Export results to shapefile
+st_write(Result_final, file.path(Output, paste0(OutputFileName, "_layers.shp")), append = FALSE)
 ```
 
 **Map of the total score**
