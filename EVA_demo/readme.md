@@ -34,6 +34,9 @@
 
 #### EVA: AQ Changes
 - AQ7: Records with density 0 where considered as an observation in the old code, contributing to the count of features in the subzone (score 5 instead of 0). In the new code, species observation with density 0 will be singed 0 score.
+- AQ10: same as AQ7
+- AQ12: same as AQ7 and AQ10
+- All AQ's: incorrect handling of NA, observation with value NA would result in 0, while it should result in NA. In the original script it was not anticipated that there would be NA records, these where considered to be just not included in the dataset.
 
 #### EVA: total score changes
 

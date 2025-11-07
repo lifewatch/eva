@@ -1264,15 +1264,25 @@ for (i in 1:NpolID) {
   grid_vector <- PolIDs$grid_id[i]
   
   for (j in features_present) {
-    # Check if species exists AND has density > 0
-    present <- any(grid_evaluated$ScientificName == j & grid_evaluated$Density > 0, na.rm = TRUE)
+    # Extract densities for this species in the current grid
+    densities <- grid_evaluated$Density[grid_evaluated$ScientificName == j]
     
-    # Use isTRUE to safely handle NA
-    if (isTRUE(present)) {
-      grid_vector <- append(grid_vector, 5)
+    # Determine the presence value
+    if (length(densities) == 0) {
+      # species not recorded at all in this grid
+      value <- 0
+    } else if (all(is.na(densities))) {
+      # all density values are NA → output NA
+      value <- NA
+    } else if (any(densities > 0, na.rm = TRUE)) {
+      # at least one density > 0 → presence
+      value <- 5
     } else {
-      grid_vector <- append(grid_vector, 0)
+      # all densities are 0 (or ignored NA) → absence
+      value <- 0
     }
+    
+    grid_vector <- append(grid_vector, value)
   }
   
   QNFH1 <- rbind(QNFH1, grid_vector)
@@ -1280,7 +1290,7 @@ for (i in 1:NpolID) {
 
 # Calculation of the average value for each subzone
 QNFH2 <- QNFH1 %>%
-  mutate(average_value = rowMeans(.[-1], na.rm = TRUE)) %>%  # include na.rm to avoid issues with NA
+  mutate(average_value = rowMeans(.[-1], na.rm = FALSE)) %>%  # keep NA if any
   rename(grid_id = 1) %>% 
   select(grid_id, average_value)
 
@@ -1308,49 +1318,56 @@ if (!exists("QNFH")) {
 QHCMSa <- data.frame(grid_id = PolIDs)
 CommonSpecList_quant <- CommonSpecList$ScientificName
 
+# Filter out species not present in the data
 for(i in CommonSpecList$ScientificName){
-    info_presence <- Quantitative_data[which(Quantitative_data$ScientificName %in% i), ]
-    if(dim(info_presence)[1] == 0){
-      CommonSpecList_quant <- CommonSpecList_quant[!CommonSpecList_quant == i]
+    info_presence <- Quantitative_data[Quantitative_data$ScientificName == i, ]
+    if(nrow(info_presence) == 0){
+      CommonSpecList_quant <- CommonSpecList_quant[CommonSpecList_quant != i]
     }
 }
 
-if (length(CommonSpecList_quant) > 0){
+if(length(CommonSpecList_quant) > 0){
   for(j in CommonSpecList_quant){
-    # get data for that species
-    lrf_abundance <- Quantitative_data[Quantitative_data$ScientificName %in% j,] %>% st_drop_geometry()
-    if (dim(lrf_abundance)[1] > 2){
-      # get average abundance for each subzones for that species
+    # Get data for that species
+    lrf_abundance <- Quantitative_data[Quantitative_data$ScientificName == j, ] %>% st_drop_geometry()
+    
+    if(nrow(lrf_abundance) > 2){
+      # Average abundance per grid
       df_lrf_abundance_average <- lrf_abundance %>%
-        dplyr::select(grid_id, ScientificName,Density) %>%
+        dplyr::select(grid_id, ScientificName, Density) %>%
         group_by(grid_id) %>%
-        summarise_at(vars(Density), list(average = mean), .groups="drop")
-      # get the lrf value for each subzones
+        summarise(average = mean(Density, na.rm = TRUE), .groups = "drop")
+      
+      # Compute lrf_value, preserving NA
       df_lrf_value <- df_lrf_abundance_average %>%
-        inner_join(unique(lrf_abundance[,names(lrf_abundance) %in% c("grid_id","ScientificName","ScientificName")]), by = "grid_id") %>%
-        mutate(lrf_value = ifelse(is.na(average), NA, 5 * (average / max(average, na.rm = TRUE))))
+        inner_join(unique(lrf_abundance[, c("grid_id","ScientificName")]), by = "grid_id") %>%
+        mutate(lrf_value = ifelse(all(is.na(average)), NA, 5 * (average / max(average, na.rm = TRUE))))
+      
     } else next
     
-    # add lrf value to final dataframe
-    QHCMSa <- left_join(QHCMSa,df_lrf_value[,c(1,4)], by ="grid_id")
+    # Join to final dataframe
+    QHCMSa <- left_join(QHCMSa, df_lrf_value[, c("grid_id", "lrf_value")], by = "grid_id")
   }
   
-  # average lrf_value results of all the species for each subzone into final metrics
-  QHCMSb <-  QHCMSa %>%
-    mutate(average_lrf_value = rowMeans(.[-1], na.rm = TRUE)) %>%
-    mutate_all(~ifelse(is.na(.), 0, .))  %>%
-    dplyr::select(grid_id,average_lrf_value)
+  # Average across species per grid, preserving NA if all are NA
+  QHCMSb <- QHCMSa %>%
+    rowwise() %>%
+    mutate(average_lrf_value = if(all(is.na(c_across(-grid_id)))) NA_real_ else mean(c_across(-grid_id), na.rm = TRUE)) %>%
+    ungroup() %>%
+    dplyr::select(grid_id, average_lrf_value)
   
-  # CLassify into 5 categories
-  QHCMSc<-QClassify(QHCMSb, QHCMSb$average_lrf_value, "QHCMSCLASS")
+  # Classify into 5 categories
+  QHCMSc <- QClassify(QHCMSb, QHCMSb$average_lrf_value, "QHCMSCLASS")
+  QHCMS <- QHCMSc[c("grid_id", "QHCMSCLASS")]
   
-  QHCMS<-QHCMSc[c("grid_id", "QHCMSCLASS")]
-  # Produce map of the results
-  produce_map_sf(QHCMS,"QHCMSCLASS","AQ8", continous)
+  # Produce map
+  produce_map_sf(QHCMS, "QHCMSCLASS", "AQ8", continous)
+
 } else {
-  if(!exists("QHCMS")) {
-  QHCMS<-PolIDs
-  QHCMS$QHCMSCLASS<-NA}
+  if(!exists("QHCMS")){
+    QHCMS <- PolIDs
+    QHCMS$QHCMSCLASS <- NA
+  }
 }
 
 ```
@@ -1455,46 +1472,55 @@ if(length(ESS) > 0){
   
   # Test if the ES species is found in the data
   for(j in ESS){
-    info_presence <- assessment_data[which(assessment_data$ScientificName %in% j), ]
-    if(dim(info_presence)[1] == 0){
-      ESS_list <- ESS_list[!ESS_list == j]
+    info_presence <- assessment_data[assessment_data$ScientificName %in% j, ]
+    if(nrow(info_presence) == 0){
+      ESS_list <- ESS_list[ESS_list != j]
     }
   }
   
   qual_QESS1 <- data.frame()
   # Loop through the whole data grid to check for the presence of the ES species
-  # A value 5 is given if the ES species is detected in the grid, if not, the value 0 is given
   for (i in 1:NpolID) {
-    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
+    grid_evaluated <- assessment_data[assessment_data$grid_id == PolIDs$grid_id[i], ]
     grid_vector <- PolIDs$grid_id[i]
+    
     for(k in ESS_list){
-      if (k %in% grid_evaluated$ScientificName){
-        grid_vector <- append(grid_vector, 5)
-      } else{
-        grid_vector <- append(grid_vector, 0)
+      # Extract densities for this species in the grid
+      densities <- grid_evaluated$Density[grid_evaluated$ScientificName == k]
+      
+      # Determine presence value
+      if(all(is.na(densities))){
+        grid_vector <- append(grid_vector, NA)     # all NA → NA
+      } else if(any(densities > 0, na.rm = TRUE)){
+        grid_vector <- append(grid_vector, 5)      # any positive → presence
+      } else {
+        grid_vector <- append(grid_vector, 0)      # all 0 → absence
       }
     }
-    qual_QESS1 <- rbind(qual_QESS1,grid_vector)
+    
+    qual_QESS1 <- rbind(qual_QESS1, grid_vector)
   }
   
   # Calculation of the average value for each subzone
-  qual_QESS2 <-  qual_QESS1 %>%
-    mutate(average_value = rowMeans(.[-1])) %>%
+  qual_QESS2 <- qual_QESS1 %>%
+    mutate(average_value = rowMeans(.[-1], na.rm = TRUE)) %>%  # na.rm TRUE for rowMeans
     rename(grid_id = 1) %>% 
-    select(grid_id,average_value)
-  
+    select(grid_id, average_value)
   
   # Classification into five categories
-  qual_QESS3<-QClassify(qual_QESS2, qual_QESS2$average_value, "qual_QESSCLASS")
-
-  qual_QESS<-qual_QESS3[c("grid_id","qual_QESSCLASS")]
+  qual_QESS3 <- QClassify(qual_QESS2, qual_QESS2$average_value, "qual_QESSCLASS")
+  
+  qual_QESS <- qual_QESS3[c("grid_id","qual_QESSCLASS")]
   
   # Produce map of the results
-  produce_map_sf(qual_QESS,"qual_QESSCLASS","AQ10", continous)
+  produce_map_sf(qual_QESS, "qual_QESSCLASS", "AQ10", continous)
+  
 } else {
-  qual_QESS<-PolIDs
-  qual_QESS$qual_QESSCLASS<-NA
+  qual_QESS <- PolIDs
+  qual_QESS$qual_QESSCLASS <- NA
 }
+
+
 
 ```
 
@@ -1569,12 +1595,15 @@ if(length(HFKS) > 0){
     grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
     grid_vector <- PolIDs$grid_id[i]
     for(k in HFKS_list){
-      if (k %in% grid_evaluated$ScientificName){
-        grid_vector <- append(grid_vector, 5)
-      } else{
-        grid_vector <- append(grid_vector, 0)
-      }
-    }
+  # Check if species exists AND has density > 0
+  present <- any(grid_evaluated$ScientificName == k & grid_evaluated$Density > 0, na.rm = TRUE)
+  
+  if (isTRUE(present)) {
+    grid_vector <- append(grid_vector, 5)
+  } else {
+    grid_vector <- append(grid_vector, 0)
+  }
+}
     qual_QHFKS1 <- rbind(qual_QHFKS1,grid_vector)
   }
   
