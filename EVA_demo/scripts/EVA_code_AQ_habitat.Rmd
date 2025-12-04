@@ -203,7 +203,11 @@ MSS <- c("")
 Import of the dataset from the file defined above.
 
 ```{r import2}
+# Import the file
 EcoComp1.0 <- fread(InputFile)
+
+# Remove rows with NA in Density
+EcoComp1.0 <- EcoComp1.0[!is.na(Density)]
 ```
 
 ## 4. Prepare the dataset
@@ -1578,52 +1582,43 @@ if(length(ESS) > 0){
 
 ```{r AQ12}
 if(length(HFKS) > 0){
-  HFKS_list <- HFKS
   
-  # Test if the HFK species is present in the data
-  for(j in HFKS){
-    info_presence <- assessment_data[which(assessment_data$ScientificName %in% j), ]
-    if(dim(info_presence)[1] == 0){
-      HFKS_list <- HFKS_list[!HFKS_list == j]
-    }
+  # Keep only species present in the data
+  HFKS_list <- HFKS[sapply(HFKS, function(sp) any(assessment_data$ScientificName == sp))]
+  
+  # Initialize result data frame
+  qual_QHFKS1 <- data.frame(grid_id = PolIDs$grid_id)
+  
+  # Loop through species and calculate presence per grid
+  for(k in HFKS_list){
+    presence_vec <- sapply(PolIDs$grid_id, function(gid){
+      densities <- assessment_data$Density[assessment_data$grid_id == gid & assessment_data$ScientificName == k]
+      if(all(is.na(densities))){
+        return(NA)          # all NA → NA
+      } else if(any(densities > 0, na.rm = TRUE)){
+        return(5)           # any positive → presence
+      } else {
+        return(0)           # all 0 → absence
+      }
+    })
+    qual_QHFKS1[[k]] <- presence_vec
   }
   
-  qual_QHFKS1 <- data.frame()
-  # Loop through the whole date grid to check for the presence of HFK species
-  # A value 5 is given if the HFK species is detected in the grid, if not, the value 0 is given
-  for (i in 1:NpolID) {
-    grid_evaluated <- assessment_data[assessment_data$grid_id %in% PolIDs$grid_id[i],]
-    grid_vector <- PolIDs$grid_id[i]
-    for(k in HFKS_list){
-  # Check if species exists AND has density > 0
-  present <- any(grid_evaluated$ScientificName == k & grid_evaluated$Density > 0, na.rm = TRUE)
+  # Compute average per grid
+  qual_QHFKS2 <- qual_QHFKS1 %>%
+    mutate(average_value = rowMeans(.[-1], na.rm = TRUE)) %>%  # ignore NA in averages
+    select(grid_id, average_value)
   
-  if (isTRUE(present)) {
-    grid_vector <- append(grid_vector, 5)
-  } else {
-    grid_vector <- append(grid_vector, 0)
-  }
-}
-    qual_QHFKS1 <- rbind(qual_QHFKS1,grid_vector)
-  }
+  # Classify into five categories
+  qual_QHFKS3 <- QClassify(qual_QHFKS2, qual_QHFKS2$average_value, "qual_QHFKSCLASS")
+  qual_QHFKS <- qual_QHFKS3[c("grid_id", "qual_QHFKSCLASS")]
   
-  # Calculation of the average value for each subzones
-  qual_QHFKS2 <-  qual_QHFKS1 %>%
-    mutate(average_value = rowMeans(.[-1])) %>%
-    rename(grid_id = 1) %>% 
-    select(grid_id,average_value)
+  # Produce map
+  produce_map_sf(qual_QHFKS, "qual_QHFKSCLASS", "AQ12", continous)
   
-  
-  # Classification into five categories
-  qual_QHFKS3<-QClassify(qual_QHFKS2, qual_QHFKS2$average_value, "qual_QHFKSCLASS")
-  
-  qual_QHFKS<-qual_QHFKS3[c("grid_id","qual_QHFKSCLASS")]
-  
-  # Produce map of the results
-  produce_map_sf(qual_QHFKS,"qual_QHFKSCLASS","AQ12", continous)
 } else {
-  qual_QHFKS<-PolIDs
-  qual_QHFKS$qual_QHFKSCLASS<-NA
+  qual_QHFKS <- PolIDs
+  qual_QHFKS$qual_QHFKSCLASS <- NA
 }
 ```
 
@@ -2092,5 +2087,5 @@ ggsave(filename=file.path(Output, paste0(OutputFileName,"_totalscore.png")),
     units = "cm",
     dpi=1600)
 }
-
+write.csv(Result_final, 'result_habitats.csv', row.names = TRUE)
 ```
