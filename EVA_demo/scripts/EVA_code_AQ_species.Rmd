@@ -118,9 +118,9 @@ FALSE for any other ecological component.
 
 ```{r setting1}
 ### Path settings for input and output data
-InputFile<-"../data/test_data_habitat.csv"
-Output<-"../output/"
-OutputFileName<-"EVA_EC_habitat"
+InputFile<-"../data/test_data_sp.csv"
+Output<-"../output_sp/"
+OutputFileName<-"EVA_EC_sp"
 
 ### Test if output path exists, if not create it 
 if (!dir.exists(Output)) {
@@ -172,7 +172,7 @@ the vector empty.
 # no ecological significant species
 
 ### Enter your own list here:
-ESS <- c("Habitat2", "Habitat7", "Habitat8")
+ESS <- c("Sp1", "Sp2", "Sp3")
 
 ```
 
@@ -183,7 +183,7 @@ please leave *HFKS \<- c("")* as it is and run the code with
 the vector empty.
 
 ```{r hfks}
-HFKS <- c("Habitat5", "Habitat6")
+HFKS <- c("")
 ```
 
 ### 2.4 Define the mutualist or symbiotic species. Put the first letter of each 'genus' in capitals.
@@ -203,6 +203,7 @@ MSS <- c("")
 Import of the dataset from the file defined above.
 
 ```{r import2}
+# Import the file
 EcoComp1.0 <- fread(InputFile)
 
 # Remove rows with NA in Density
@@ -643,16 +644,16 @@ QClassify <- function(x, y, z) {
 # MOCKUP VERSION (hardcoded lists)
 # -------------------------------------------------------------------------
 
-# Hardcoded empty rare species list (no species are considered rare)
+# Hardcoded  rare species list
 RareSpecList <- data.frame(
-  ScientificName = character(),  # species names
-  grid_id = numeric()            # number of grid cells (count)
+  ScientificName = c("Sp7"),  # species names
+  grid_id = numeric(64)            # number of grid cells (count)
 )
 
-# Hardcoded common species list (all species considered common in mockup)
+# Hardcoded common species list 
 CommonSpecList <- data.frame(
-  ScientificName = c("Habitat1", "Habitat2", "Habitat3", "Habitat4", "Habitat5", "Habitat6", "Habitat7", "Habitat8"),  # example species
-  grid_id = c(64, 64, 64, 64, 64, 64,64, 64)                                   # example grid cell counts
+  ScientificName = c("Sp1", "Sp2", "Sp3", "Sp4", "Sp5", "Sp6", "Sp8"),  # example species
+  grid_id = c(64, 64, 64, 64, 64, 64,64)                                   # example grid cell counts
 )
 
 # Dataframe required for AQ9 
@@ -1012,7 +1013,6 @@ if(!length(RareSpecList$ScientificName) == 0){
   QPRS<-PolIDs
   QPRS$QPRSCLASS<-NA}
 }
-
 ```
 
 ### 7.3 AQ2: Is the subzone characterised by a high abundance of many locally rare features?
@@ -1800,27 +1800,23 @@ columns:
 
 ```{r final_df}
 # Final dataframe with all the results 
-# Start from PolIDs as base
-EcoCompQ_base <- PolIDs %>%
-  left_join(QPRS, by = "grid_id") %>%
-  left_join(QHARS, by = "grid_id") %>%
-  left_join(QRRS, by = "grid_id") %>%
-  left_join(QARRS, by = "grid_id") %>%
-  left_join(QNRS, by = "grid_id") %>%
-  left_join(QANRS, by = "grid_id") %>%
-  left_join(QNFH, by = "grid_id") %>%
-  left_join(QHCMS, by = "grid_id") %>%
-  left_join(QHACS, by = "grid_id") %>%
-  left_join(qual_QESS, by = "grid_id") %>%
-  left_join(QESS, by = "grid_id") %>%
-  left_join(qual_QHFKS, by = "grid_id") %>%
-  left_join(QHFKS, by = "grid_id") %>%
-  left_join(qual_QMSS, by = "grid_id") %>%
-  left_join(QMSS, by = "grid_id")
+EcoCompQ_base <- data.frame(QPRS$QPRSCLASS,
+                       QHARS$QHARSCLASS,
+                       QRRS$QRRSCLASS,
+                       QARRS$QARRSCLASS,
+                       QNRS$QNRSCLASS,
+                       QANRS$QANRSCLASS,
+                       QNFH$QNFHCLASS,
+                       QHCMS$QHCMSCLASS,
+                       QHACS$QHACSCLASS,
+                       qual_QESS$qual_QESSCLASS,
+                       QESS$QESSCLASS,
+                       qual_QHFKS$qual_QHFKSCLASS,
+                       QHFKS$QHFKSCLASS,
+                       qual_QMSS$qual_QMSSCLASS,
+                       QMSS$QMSSCLASS)
 
-# Rename columns
-names(EcoCompQ_base)[-1] <- c("AQ1","AQ2", "AQ3","AQ4","AQ5","AQ6", "AQ7", "AQ8",
-                               "AQ9", "AQ10", "AQ11","AQ12","AQ13", "AQ14","AQ15")
+names(EcoCompQ_base) <- c("AQ1","AQ2", "AQ3","AQ4","AQ5","AQ6", "AQ7", "AQ8","AQ9", "AQ10", "AQ11","AQ12","AQ13", "AQ14","AQ15")
 
 
 ```
@@ -2090,5 +2086,5 @@ ggsave(filename=file.path(Output, paste0(OutputFileName,"_totalscore.png")),
     units = "cm",
     dpi=1600)
 }
-
+write.csv(Result_final, 'result_habitats.csv', row.names = TRUE)
 ```
