@@ -118,7 +118,7 @@ FALSE for any other ecological component.
 
 ```{r setting1}
 ### Path settings for input and output data
-InputFile<-"../data/test_data_sp.csv"
+InputFile<-"../data/test_data_sp - Copy (2).csv"
 Output<-"../output_sp/"
 OutputFileName<-"EVA_EC_sp"
 
@@ -206,8 +206,6 @@ Import of the dataset from the file defined above.
 # Import the file
 EcoComp1.0 <- fread(InputFile)
 
-# Remove rows with NA in Density
-EcoComp1.0 <- EcoComp1.0[!is.na(Density)]
 ```
 
 ## 4. Prepare the dataset
@@ -307,7 +305,6 @@ EcoComp1.1 <- data.frame(Longitude=EcoComp1.0$Longitude,
                          EventDate=EcoComp1.0$EventDate, 
                          FieldNumber=EcoComp1.0$FieldNumber, 
                          ScientificName=EcoComp1.0$ScientificName, 
-                         Density = EcoComp1.0$Density,
                          stringsAsFactors = FALSE)
 ```
 
